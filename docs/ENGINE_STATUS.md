@@ -19,7 +19,7 @@ Objetivo declarado: Minecraft Java 1.21.1. Este archivo distingue funciones cone
 - Sin un WASM que cargue correctamente, los biomas se ven en modo preview y no pueden considerarse válidos para la semilla.
 - El relieve 3D continúa apoyándose en `HeightGen` heredado. El worker actual construye arrays de superficie a partir de esas alturas; no replica la densidad `final_density` de Minecraft.
 - Aún no están implementados todos los datos de ruido de Overworld, reglas completas de superficie, generación de subsuelo y colocación de minerales de Java 1.21.1.
-- La semilla `5890866665536842607` no ha sido confirmada con una ejecución de Cubiomes real; `X=-508, Z=24` solo es una coordenada de inspección heredada.
+- La semilla `5890866665536842607` está configurada para buscar, cuando el WASM local está disponible, el ID 185 en una cuadrícula de 16 bloques dentro de `X/Z ±2048` y comenzar en la muestra de Cherry Grove más cercana al origen. No es el spawn vanilla oficial; aún no se ha ejecutado esa búsqueda en este entorno. La antigua coordenada `X=-508, Z=24` ya no se fuerza.
 - No se ejecutó el juego en un navegador real ni se comparó un chunk con una instalación vanilla de Java 1.21.1 en este entorno.
 
 ## Memoria y rendimiento
