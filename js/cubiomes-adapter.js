@@ -9,6 +9,10 @@
   let moduleInstance = null;
   let activeSeed = null;
   let mode = null;
+  const adapterScriptUrl = document.currentScript && document.currentScript.src
+    ? document.currentScript.src : document.baseURI;
+  const engineBaseUrl = new URL('../engine/', adapterScriptUrl);
+  const engineModuleUrl = new URL('cubiomes.js', engineBaseUrl).href;
 
   const API = {
     available: false,
@@ -19,7 +23,7 @@
         modulePromise = (async function () {
           let imported;
           try {
-            imported = await import('../engine/cubiomes.js');
+            imported = await import(engineModuleUrl);
           } catch (error) {
             throw new Error(
               'No se encontró el WASM local de Cubiomes. Ejecuta scripts/build-cubiomes-wasm.sh. ' +
@@ -31,7 +35,7 @@
             throw new Error('El módulo Emscripten no exporta createCubiomesModule.');
           }
           const mod = await factory({
-            locateFile: function (path) { return new URL('./engine/' + path, document.baseURI).href; }
+            locateFile: function (path) { return new URL(path, engineBaseUrl).href; }
           });
           if (!mod || typeof mod.ccall !== 'function' || !mod.HEAP32) {
             throw new Error('Cubiomes WASM se cargó sin la API puente esperada.');
