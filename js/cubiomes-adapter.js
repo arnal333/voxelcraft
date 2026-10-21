@@ -1,83 +1,100 @@
-/* Cubiomes adapter for Java 1.21.1.
- * Uses a pinned precompiled Cubiomes WASM build when available; if unavailable,
- * it fails explicitly and the app labels its procedural preview as approximate.
+/* Safe adapter around the project's own Cubiomes C bridge.
+ * Does not allocate undocumented Generator structs or call unstable upstream symbols.
+ * Requires engine/cubiomes.js + engine/cubiomes.wasm built with scripts/build-cubiomes-wasm.sh.
  */
 (function () {
-  const CDN_BASE = 'https://cdn.jsdelivr.net/gh/iamdookie1/seedview@95b35217fb7e806f7973943d211e047349e83d44/public/wasm/';
-  let modulePromise = null, moduleInstance = null, mode = null;
-  let activeSeed = null, generatorPtr = 0;
+  'use strict';
+
+  let modulePromise = null;
+  let moduleInstance = null;
+  let activeSeed = null;
+  let mode = null;
+
   const API = {
     available: false,
-    version: 'Minecraft Java 1.21.1 / Cubiomes',
+    version: 'Minecraft Java 1.21.1 / Cubiomes bridge',
     async load() {
       if (moduleInstance) return moduleInstance;
-      if (!modulePromise) modulePromise = (async () => {
-        // Prefer a locally built bridge if the user compiled it; otherwise use the pinned WASM build.
-        try {
-          // The build script emits an ES module; load it through the module API rather than a classic script tag.
-          const localModule = await import('../engine/cubiomes.js');
-          const localFactory = localModule.default || localModule.createCubiomesModule || window.createCubiomesModule;
-          if (typeof localFactory === 'function') {
-            moduleInstance = await localFactory();
-            mode = 'local-bridge';
-            API.available = true;
-            return moduleInstance;
+      if (!modulePromise) {
+        modulePromise = (async function () {
+          let imported;
+          try {
+            imported = await import('../engine/cubiomes.js');
+          } catch (error) {
+            throw new Error(
+              'No se encontró el WASM local de Cubiomes. Ejecuta scripts/build-cubiomes-wasm.sh. ' +
+              String(error && error.message || error)
+            );
           }
-          throw new Error('El motor local no exporta createCubiomesModule.');
-        } catch (_) { /* try the pinned remote build below */ }
-        await new Promise((resolve, reject) => {
-          const s = document.createElement('script');
-          s.src = CDN_BASE + 'cubiomes.js'; s.async = true;
-          s.onload = resolve;
-          s.onerror = () => reject(new Error('No se pudo cargar el motor Cubiomes remoto. Comprueba tu conexión a Internet.'));
-          document.head.appendChild(s);
-        });
-        if (typeof window.CubiomesModule !== 'function') throw new Error('El WASM remoto no expone CubiomesModule.');
-        moduleInstance = await window.CubiomesModule({ locateFile: p => CDN_BASE + p });
-        mode = 'upstream-wasm'; API.available = true; return moduleInstance;
-      })();
-      try { return await modulePromise; } catch (e) { modulePromise = null; API.available = false; throw e; }
+          const factory = imported.default || imported.createCubiomesModule;
+          if (typeof factory !== 'function') {
+            throw new Error('El módulo Emscripten no exporta createCubiomesModule.');
+          }
+          const mod = await factory({
+            locateFile: function (path) { return new URL('../engine/' + path, document.baseURI).href; }
+          });
+          if (!mod || typeof mod.ccall !== 'function' || !mod.HEAP32) {
+            throw new Error('Cubiomes WASM se cargó sin la API puente esperada.');
+          }
+          moduleInstance = mod;
+          mode = 'local-bridge';
+          API.available = true;
+          return mod;
+        })();
+      }
+      try {
+        return await modulePromise;
+      } catch (error) {
+        modulePromise = null;
+        moduleInstance = null;
+        mode = null;
+        API.available = false;
+        throw error;
+      }
     },
     async setSeed(seed) {
-      const m = await API.load();
+      const mod = await API.load();
       const normalized = BigInt.asUintN(64, BigInt(seed));
       if (activeSeed === normalized) return true;
-      if (mode === 'local-bridge') {
-        m.ccall('worldgen_init', null, ['bigint'], [normalized]);
-      } else {
-        if (generatorPtr) { m._free(generatorPtr); generatorPtr = 0; }
-        // sizeof(Generator) is well below this allocation for the supported Cubiomes build.
-        generatorPtr = m._malloc(4 * 1024 * 1024);
-        if (!generatorPtr) throw new Error('No se pudo reservar memoria para Cubiomes.');
-        // Upstream MCVersion enum: MC_1_21_1 == 26. This is NOT the ordinal 21.
-        m._setupGenerator(generatorPtr, 26, 0);
-        m._applySeed(generatorPtr, 0, normalized);
-      }
+      mod.ccall('worldgen_init', null, ['bigint'], [normalized]);
       activeSeed = normalized;
       return true;
     },
     async biomeAt(x, y, z, seed) {
-      const m = await API.load(); await API.setSeed(seed);
-      if (mode === 'local-bridge') return m.ccall('worldgen_biome_at', 'number', ['number','number','number'], [x,y,z]);
-      return m._getBiomeAt(generatorPtr, 1, x, y, z);
+      const mod = await API.load();
+      await API.setSeed(seed);
+      return mod.ccall('worldgen_biome_at', 'number',
+        ['number', 'number', 'number'], [Math.trunc(x), Math.trunc(y), Math.trunc(z)]);
     },
-    async generateMap({x, z, width, height, step, y = 80, seed}) {
-      const m = await API.load(); await API.setSeed(seed);
-      if (mode === 'local-bridge') {
-        const rc = m.ccall('worldgen_generate_map', 'number', ['number','number','number','number','number','number'], [x,z,width,height,step,y]);
-        if (rc !== 0) throw new Error('Cubiomes local no pudo generar el mapa (código '+rc+').');
-        const ptr = m.ccall('worldgen_map_ptr', 'number', [], []);
-        return Array.from(new Int32Array(m.HEAP32.buffer, ptr, width * height));
+    async generateMap(options) {
+      const mod = await API.load();
+      const width = Number(options && options.width);
+      const height = Number(options && options.height);
+      const x = Number(options && options.x);
+      const z = Number(options && options.z);
+      const step = Number(options && options.step);
+      const y = Number(options && options.y == null ? 80 : options.y);
+      if (!Number.isInteger(width) || !Number.isInteger(height) ||
+          width < 1 || height < 1 || width > 1024 || height > 1024 ||
+          !Number.isInteger(step) || step < 1 ||
+          ![x, z, y].every(Number.isFinite)) {
+        throw new Error('Parámetros inválidos para generar el mapa de biomas.');
       }
-      const ids = new Array(width * height);
-      for (let row = 0; row < height; row++) {
-        for (let col = 0; col < width; col++) {
-          ids[row * width + col] = m._getBiomeAt(generatorPtr, 1, x + col * step, y, z + row * step);
-        }
+      await API.setSeed(options.seed);
+      const rc = mod.ccall('worldgen_generate_map', 'number',
+        ['number', 'number', 'number', 'number', 'number', 'number'],
+        [Math.trunc(x), Math.trunc(z), width, height, step, Math.trunc(y)]);
+      if (rc !== 0) throw new Error('Cubiomes devolvió código ' + rc + ' al generar el mapa.');
+      const ptr = mod.ccall('worldgen_map_ptr', 'number', [], []);
+      const count = width * height;
+      if (!ptr || ptr < 0 || (ptr + count * 4) > mod.HEAP32.buffer.byteLength) {
+        throw new Error('Cubiomes devolvió un puntero de mapa fuera de la memoria WASM.');
       }
-      return ids;
+      // Copy the WASM view: the bridge may reuse/reallocate its map on the next call.
+      return new Int32Array(mod.HEAP32.buffer, ptr, count).slice();
     },
     get mode() { return mode; }
   };
+
   window.CubiomesAdapter = API;
 })();
