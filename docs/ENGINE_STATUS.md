@@ -15,7 +15,7 @@ Objetivo declarado: Minecraft Java 1.21.1. Este archivo distingue funciones cone
 
 ## Pendiente / no verificado
 
-- `engine/cubiomes.js` y `engine/cubiomes.wasm` se compilaron correctamente en GitHub Actions con el Docker/Emscripten fijado. Los binarios se ignoran en Git, así que hay que ejecutar el build localmente antes de usar Cubiomes en el navegador.
+- `engine/cubiomes.js` y `engine/cubiomes.wasm` se compilaron correctamente en GitHub Actions con Docker/Emscripten fijado y se publicaron en `main` después de pasar las pruebas. El workflow conserva la atribución MIT en `engine/CUBIOMES-LICENSE.txt`; los cambios generados solo vuelven a disparar CI cuando cambian archivos de código/configuración, no por el commit de binarios.
 - Sin un WASM que cargue correctamente, los biomas se ven en modo preview y no pueden considerarse válidos para la semilla.
 - El relieve 3D continúa apoyándose en `HeightGen` heredado. El worker actual construye arrays de superficie a partir de esas alturas; no replica la densidad `final_density` de Minecraft.
 - Aún no están implementados todos los datos de ruido de Overworld, reglas completas de superficie, generación de subsuelo y colocación de minerales de Java 1.21.1.
