@@ -22,6 +22,8 @@ jobs:
           docker run --rm -v "${PWD}:/workspace" -w /workspace voxelcraft-emsdk
           test -s engine/cubiomes.js
           test -s engine/cubiomes.wasm
+      - name: Verify the requested seed with the compiled Cubiomes WASM
+        run: node scripts/test-cubiomes-wasm.mjs
       - name: Test modular world-generation infrastructure
         run: node scripts/test-worldgen.js
       - name: Set up Python
