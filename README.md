@@ -58,6 +58,6 @@ La arquitectura es ahora modular y las tareas de biomas/plan de bloques se puede
 2. **Altura y forma del terreno:** todavía utilizan el generador simplificado heredado; el worker de terreno solo traslada esas columnas a una estructura eficiente. No calcula aún la densidad vanilla `final_density`.
 3. **Reglas de superficie, subsuelo y minerales:** las reglas completas de Minecraft 1.21.1 no están implementadas.
 4. **Paridad bit-a-bit:** no está validada. Se necesitan datos correctos de la versión y pruebas comparativas contra el mundo Java real en coordenadas conocidas.
-5. **Semilla `5890866665536842607`:** el punto `X=-508, Z=24` es solo una coordenada de inspección heredada. No se afirma que sea el spawn ni que corresponda a un bosque de cerezos hasta consultar Cubiomes real.
+5. **Semilla `5890866665536842607`:** con Cubiomes WASM compilado, el juego busca dentro de `X/Z ±2048` un punto de muestreo cuyo ID sea `185` (Cherry Grove) y arranca cerca del punto más próximo al origen. Esto es un punto de inspección para ver los árboles rosas, no el spawn vanilla oficial. Si Cubiomes no está disponible, no se inventa el bioma y se usa el inicio de vista previa `X=8, Z=8`.
 
 Se conservó el juego funcional en lugar de reemplazarlo por una demo nueva. Las comprobaciones hechas a los archivos fuente son análisis sintácticos; no equivalen a una prueba visual de ejecución en navegador.
