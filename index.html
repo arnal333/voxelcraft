@@ -875,6 +875,8 @@ async function buildInitialWorld(seed, onProg) {
   worldData = {};
   worldDataSize = 0;
   chunkScheduler.clear();
+  const engineStatusNode = document.getElementById('engine-status');
+  if (engineStatusNode) engineStatusNode.textContent = 'MODO PREVIEW: terreno aproximado · NO es terreno vanilla Java 1.21.1';
   currentSeed=seed;
   biomeGen=new BiomeGen(seed);
   heightGen=new HeightGen(seed);
@@ -958,6 +960,11 @@ async function buildInitialWorld(seed, onProg) {
     }
   } else if (wantsCherrySpawn) {
     cherrySearchStatus = 'Cubiomes no disponible: no se puede confirmar el bioma de cerezo; se usa inicio preview X=8, Z=8.';
+  }
+
+  if (wantsCherrySpawn && engineStatusNode) {
+    engineStatusNode.textContent = 'MODO PREVIEW · terreno aproximado · ' +
+      (cherrySearchStatus || 'Cubiomes no confirmó el bioma de cerezo.');
   }
 
   const baseChunkX = Math.floor(startX / CHUNK_SIZE);
