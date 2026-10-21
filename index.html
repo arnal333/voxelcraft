@@ -148,6 +148,7 @@ body { background:#000; overflow:hidden; font-family:'Segoe UI',sans-serif; }
 <script src="./src/world/chunkScheduler.js"></script>
 <script src="./src/generator/biomeGenerator.js"></script>
 <script src="./src/generator/terrainGenerator.js"></script>
+<script src="./src/generator/worldGenerator.js"></script>
 <script src="./src/controls/flyControls.js"></script>
 <script>
 // ─────────────────────────────────────────────
@@ -300,7 +301,7 @@ async function ensureExactBiomeChunk(cx, cz, generationToken) {
   }
   if (complete) return true;
   try {
-    const ids = await window.VoxelCraftBiomeGenerator.generateMap({
+    const ids = await window.VoxelCraftWorldGenerator.generateBiomeMap({
       x: originX, z: originZ, width: 5, height: 5, step: 4,
       y: 80, seed: currentSeed.toString()
     });
@@ -611,7 +612,7 @@ async function buildChunk(cx,cz) {
   let surfacePlan = null;
   try {
     if (window.VoxelCraftTerrainGenerator) {
-      surfacePlan = await window.VoxelCraftTerrainGenerator.buildSurfacePlan(
+      surfacePlan = await window.VoxelCraftWorldGenerator.buildSurfacePlan(
         workerColumns,
         { seaLevel: SEA_LEVEL, stoneDepth: VISIBLE_STONE_DEPTH }
       );
@@ -901,7 +902,7 @@ async function buildInitialWorld(seed, onProg) {
         const searchStep = 16;
         const searchSize = 257;
         const searchStart = -2048;
-        const searchIds = await window.VoxelCraftBiomeGenerator.generateMap({
+        const searchIds = await window.VoxelCraftWorldGenerator.generateBiomeMap({
           x: searchStart, z: searchStart,
           width: searchSize, height: searchSize,
           step: searchStep, y: 80, seed: seed.toString()
@@ -936,7 +937,7 @@ async function buildInitialWorld(seed, onProg) {
       const topX = Math.floor((startX - radius) / 4) * 4;
       const topZ = Math.floor((startZ - radius) / 4) * 4;
       const n = Math.ceil((radius * 2) / 4) + 1;
-      const ids = await window.VoxelCraftBiomeGenerator.generateMap({
+      const ids = await window.VoxelCraftWorldGenerator.generateBiomeMap({
         x: topX, z: topZ, width: n, height: n, step: 4, y: 80, seed: seed.toString()
       });
       for (let rz = 0; rz < n; rz++) {
@@ -1033,8 +1034,19 @@ function loop() {
 // Pointer lock
 function setupInput() {
   const ctp=document.getElementById('click-to-play');
-  ctp.addEventListener('click',()=>{
-    document.getElementById('c').requestPointerLock();
+  ctp.addEventListener('click', async () => {
+    const canvas = document.getElementById('c');
+    // Prefer unadjusted mouse movement where the browser supports it.
+    try {
+      await canvas.requestPointerLock({ unadjustedMovement: true });
+    } catch (error) {
+      // Some browsers reject the options argument; retry with the standard API.
+      try {
+        await canvas.requestPointerLock();
+      } catch (fallbackError) {
+        console.warn('[Controls] No se pudo capturar el mouse:', fallbackError || error);
+      }
+    }
   });
   document.addEventListener('pointerlockchange',()=>{
     if(document.pointerLockElement===document.getElementById('c')) {
@@ -1115,7 +1127,7 @@ async function renderBiomeMap() {
   if(window.CubiomesAdapter) {
     try {
       const topX=Math.round(ox-(size/2)*biomeMapStep), topZ=Math.round(oz-(size/2)*biomeMapStep);
-      ids=await window.VoxelCraftBiomeGenerator.generateMap({x:topX,z:topZ,width:size,height:size,step:biomeMapStep,y:80,seed});
+      ids=await window.VoxelCraftWorldGenerator.generateBiomeMap({x:topX,z:topZ,width:size,height:size,step:biomeMapStep,y:80,seed});
       biomeMapUsingCubiomes=true;
     } catch(err) {
       biomeMapUsingCubiomes=false;
