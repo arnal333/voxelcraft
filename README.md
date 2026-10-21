@@ -1,42 +1,54 @@
-# Minecraft 3D Walk — integración de mapa de semillas Java 1.21.1
+# VoxelCraft / Minecraft 3D Walk — pipeline modular de generación
 
-## Incluye
+Este repositorio conserva el prototipo jugable Three.js e incorpora la arquitectura descrita en el informe **“De Cubiomes a Bit-A-Bit”**. El objetivo de compatibilidad es **Minecraft Java 1.21.1**. El estado actual es un prototipo híbrido y **no** un generador vanilla bit-a-bit.
 
-- `index.html`: juego original Three.js conservado, con botón de mapa de biomas, consulta de coordenadas y panel de diagnóstico.
-- `js/cubiomes-adapter.js`: adaptador que carga el motor WebAssembly opcional cuando está compilado.
-- `engine/cubiomes-bridge.c`: puente C para usar la API de biomas de Cubiomes fijada en `MC_1_21_1`.
-- `scripts/build-cubiomes-wasm.sh`: compila Cubiomes con Emscripten y genera `engine/cubiomes.js` y `engine/cubiomes.wasm`.
-- `docs/ENGINE_STATUS.md`: limitaciones verificadas y estado real.
+## Arquitectura incorporada
 
-## Cómo activar el mapa de biomas compatible
+- `index.html`: entrada del juego, escena Three.js, HUD, chunks, consola `/tp` y controles de vuelo.
+- `src/core/gameState.js`: contrato de versión y estado de compatibilidad explícito.
+- `src/renderer/voxelMaterials.js`: texturas pixel-art deterministas compartidas.
+- `src/world/chunkScheduler.js`: cola de chunks con deduplicación y descarte de trabajo que quedó fuera del radio.
+- `src/generator/biomeGenerator.js`: API de alto nivel para calcular biomas, priorizando un Web Worker.
+- `src/generator/biomeWorker.js`: inicializa el puente WASM local dentro de un worker y copia los IDs a un `Int32Array` transferible.
+- `src/generator/terrainGenerator.js`: cliente de worker para construir planes de bloques por chunk.
+- `src/generator/terrainWorker.js`: calcula arrays de posiciones agrupadas por material fuera del hilo de renderizado.
+- `src/controls/flyControls.js`: estado de vuelo; `F` alterna el vuelo, espacio sube, `Ctrl`/`C` baja y `Shift` acelera.
+- `js/cubiomes-adapter.js`: adaptador de compatibilidad con inicialización asíncrona y errores visibles.
+- `engine/cubiomes-bridge.c`: superficie C estable que expone inicialización por semilla y cálculo de biomas/mapas.
+- `scripts/build-cubiomes-wasm.sh`: compilación modular ES de Cubiomes con Emscripten.
+- `docs/WORLDGEN_ARCHITECTURE.md`: qué ya está conectado y qué falta para la fidelidad exacta.
 
-1. Instala y activa Emscripten SDK (`emcc`) y Git.
-2. Ejecuta `scripts/build-cubiomes-wasm.sh` desde una terminal bash. El script descarga la dependencia pública `Cubitect/cubiomes` si no existe en `engine/vendor/cubiomes`.
-3. Sirve la carpeta por HTTP local (por ejemplo, `python -m http.server 8000`) y abre `http://localhost:8000` apuntando a esta carpeta. No abras `index.html` con `file://`.
-4. Pulsa **Mapa de biomas (preview)**. Cuando el WASM esté disponible, el panel indicará que Cubiomes está activo; si no, mostrará el mapa aproximado y explicará por qué.
+## Construir el WASM local
 
-## Importante: no afirmar más de lo que se ha verificado
+Se necesitan Git y Emscripten SDK con `emcc` activado. En una terminal que tenga activado Emscripten:
 
-Cubiomes reproduce biomas/características para versiones de Minecraft Java; no es el generador completo de bloques. El mapa exacto depende de compilar el WASM y verificar su salida. El terreno 3D de esta entrega continúa usando el generador aproximado anterior. No se ha validado igualdad bloque por bloque con Minecraft 1.21.1.
+```bash
+bash scripts/build-cubiomes-wasm.sh
+python -m http.server 8000
+```
 
-## Controles conservados
+Abre `http://localhost:8000` en el navegador. **No** abras el HTML mediante `file://`: los módulos ES y Workers necesitan un servidor HTTP. El script descarga Cubiomes desde su repositorio upstream si aún no existe bajo `engine/vendor/cubiomes`.
 
-WASD para moverse, espacio para saltar, Shift según el comportamiento previo del proyecto, mouse para mirar, Escape para soltar el mouse. La barra de semilla y el botón de regeneración siguen disponibles.
+Para generar información de depuración de Emscripten/source maps:
 
+```bash
+DEBUG=1 bash scripts/build-cubiomes-wasm.sh
+```
 
-## Corrección para la semilla 5890866665536842607
+El archivo compilado `engine/cubiomes.js` y el correspondiente `engine/cubiomes.wasm` se generan localmente; no se suben en este cambio. Si no están construidos, el juego puede entrar en modo aproximado y avisar de ello.
 
-- El proyecto intenta cargar un build WASM de Cubiomes fijado a un commit para calcular biomas reales.
-- El código usa `MC_1_21_1` (valor 26 en el enum upstream), no el número 21 como ordinal.
-- La tabla de IDs de bioma fue corregida: el ID 185 corresponde a `cherry_grove`, no a océano.
-- Para esta semilla, el mundo inicia en las coordenadas de referencia compartidas X=-508, Z=24, porque el enlace anterior estaba centrado ahí. Eso es un punto de inspección, no una afirmación de que sea el spawn vanilla oficial.
-- Solo la selección de biomas usa Cubiomes; altura, costa y bloques siguen generándose con el sistema aproximado original. No debe considerarse un clon de terreno vanilla exacto.
-- El motor remoto requiere conexión a Internet. Si no se carga, la interfaz debe indicar que está usando la vista previa aproximada.
+## Controles
 
+WASD para moverse, mouse para mirar, espacio para saltar (o subir en vuelo), `F` para activar/desactivar vuelo, `Ctrl`/`C` para bajar durante el vuelo, `Shift` para el comportamiento de velocidad, `T` o `/` para abrir comandos, y `Esc` para liberar el mouse. `/tp x y z` y `/teleport x y z` siguen disponibles.
 
-## Mejoras recientes
-- Texturas procedurales pixel-art 16×16 con filtro nearest y variación sutil; no dependen de descargas de imágenes.
-- Consola de comandos: pulsa `T` o `/`, escribe `/tp x y z` (también `/tp @s x y z`) y pulsa Enter.
-- Generación de árboles revisada para que la elección de posiciones no omita tan fácilmente los árboles de un bioma de cerezo.
+## Estado de fidelidad (importante)
 
-**Límite importante:** el motor de terreno sigue siendo un prototipo aproximado. Los biomas y la presencia de cerezo solo se pueden considerar verificados si Cubiomes WASM carga correctamente y devuelve `CHERRY_GROVE` para las coordenadas inspeccionadas. La altura, las capas de bloques y el relieve no son equivalentes a Minecraft Java vanilla.
+La arquitectura es ahora modular y las tareas de biomas/plan de bloques se pueden ejecutar en Workers. Sin embargo:
+
+1. **Biomas:** requieren que el bridge de Cubiomes WASM 1.21.1 se compile y cargue para considerarse calculados por Cubiomes. Los IDs no reconocidos no se disfrazan como llanuras.
+2. **Altura y forma del terreno:** todavía utilizan el generador simplificado heredado; el worker de terreno solo traslada esas columnas a una estructura eficiente. No calcula aún la densidad vanilla `final_density`.
+3. **Reglas de superficie, subsuelo y minerales:** las reglas completas de Minecraft 1.21.1 no están implementadas.
+4. **Paridad bit-a-bit:** no está validada. Se necesitan datos correctos de la versión y pruebas comparativas contra el mundo Java real en coordenadas conocidas.
+5. **Semilla `5890866665536842607`:** el punto `X=-508, Z=24` es solo una coordenada de inspección heredada. No se afirma que sea el spawn ni que corresponda a un bosque de cerezos hasta consultar Cubiomes real.
+
+Se conservó el juego funcional en lugar de reemplazarlo por una demo nueva. Las comprobaciones hechas a los archivos fuente son análisis sintácticos; no equivalen a una prueba visual de ejecución en navegador.
