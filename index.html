@@ -274,12 +274,51 @@ const BIOME_DEFS = {
 // Cubiomes biome cache. The 3D block terrain remains an approximation, but
 // biome choice can use real Java 1.21.1 biome samples when WASM is available.
 let exactBiomeCache = new Map();
+let exactBiomeEngineUnavailable = false;
 function exactBiomeKeyAt(wx,wz) {
   const sx=Math.round(wx/4)*4, sz=Math.round(wz/4)*4;
   const id=exactBiomeCache.get(`${sx}|${sz}`);
   return id===undefined ? null : cubiomesKey(id);
 }
 function clearExactBiomeCache() { exactBiomeCache = new Map(); }
+
+async function ensureExactBiomeChunk(cx, cz, generationToken) {
+  if (generationToken !== worldBuildGeneration || exactBiomeEngineUnavailable ||
+      !window.VoxelCraftBiomeGenerator) return false;
+  const originX = cx * CHUNK_SIZE;
+  const originZ = cz * CHUNK_SIZE;
+  // exactBiomeKeyAt rounds coordinates to a 4-block grid, so include the next edge.
+  const sampleAxis = [0, 4, 8, 12, 16];
+  let complete = true;
+  for (const dx of sampleAxis) {
+    for (const dz of sampleAxis) {
+      const sx = Math.round((originX + dx) / 4) * 4;
+      const sz = Math.round((originZ + dz) / 4) * 4;
+      if (!exactBiomeCache.has(sx + '|' + sz)) complete = false;
+    }
+  }
+  if (complete) return true;
+  try {
+    const ids = await window.VoxelCraftBiomeGenerator.generateMap({
+      x: originX, z: originZ, width: 5, height: 5, step: 4,
+      y: 80, seed: currentSeed.toString()
+    });
+    // Never let a late result for an old seed contaminate a new world.
+    if (generationToken !== worldBuildGeneration) return false;
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 5; col++) {
+        exactBiomeCache.set((originX + col * 4) + '|' + (originZ + row * 4), ids[row * 5 + col]);
+      }
+    }
+    return true;
+  } catch (error) {
+    if (generationToken === worldBuildGeneration) {
+      exactBiomeEngineUnavailable = true;
+      console.warn('[Cubiomes] Exact biome worker unavailable; remaining chunks will use the labelled preview fallback.', error);
+    }
+    return false;
+  }
+}
 
 class BiomeGen {
   constructor(seed) {
@@ -527,6 +566,8 @@ async function buildChunk(cx,cz) {
   if (chunkMeshes.has(key) || chunkBuildPending.get(key) === generationToken) return;
   chunkBuildPending.set(key, generationToken);
   try {
+  await ensureExactBiomeChunk(cx, cz, generationToken);
+  if (generationToken !== worldBuildGeneration) return;
   const group = new THREE.Group();
   const rng = new JavaRandom(currentSeed ^ BigInt(cx*0x9e3779b9+cz*0x6c62272e));
 
@@ -837,6 +878,7 @@ async function buildInitialWorld(seed, onProg) {
   biomeGen=new BiomeGen(seed);
   heightGen=new HeightGen(seed);
   clearExactBiomeCache();
+  exactBiomeEngineUnavailable = false;
 
   // Este seed pidió iniciar cerca de un bosque de cerezos. La ubicación anterior
   // (-508, 24) nunca quedó verificada: ahora solo se acepta si Cubiomes confirma ID 185.
@@ -904,6 +946,7 @@ async function buildInitialWorld(seed, onProg) {
         ' Alturas y topografía 3D siguen siendo preview.';
     } catch (err) {
       console.warn('[Cubiomes] No se pudo verificar el motor real:', err);
+      exactBiomeEngineUnavailable = true;
       cherrySearchStatus = wantsCherrySpawn
         ? 'Cubiomes no disponible: no se puede confirmar el bioma de cerezo; se usa inicio preview X=8, Z=8.'
         : 'Cubiomes no disponible: biomas en modo preview.';
