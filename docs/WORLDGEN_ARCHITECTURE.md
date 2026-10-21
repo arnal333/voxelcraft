@@ -24,7 +24,7 @@ Semilla Java de 64 bits + versión/dimensión
       Three.js / InstancedMesh
 ```
 
-En el estado actual, el flujo está parcialmente conectado: Cubiomes puede dar IDs de bioma si se construye y carga el WASM local; los workers de terreno agrupan en arrays tipados las posiciones de los bloques de la vista previa; Three.js crea las mallas en el hilo principal. Las alturas siguen procediendo del generador heredado, no del ruido vanilla.
+En el estado actual, el flujo está parcialmente conectado: Cubiomes puede dar IDs de bioma si se construye y carga el WASM local; si el jugador explora más allá de la caché, cada chunk puede pedir muestras adicionales al Worker. Los workers de terreno agrupan en arrays tipados las posiciones de los bloques de la vista previa; Three.js crea las mallas en el hilo principal. Las alturas siguen procediendo del generador heredado, no del ruido vanilla.
 
 ## Responsabilidad de los módulos
 
@@ -57,7 +57,7 @@ Una implementación fiel todavía necesita:
 3. **Reglas de superficie reales.** Evaluar las reglas versionadas según alturas, estados de superficie, agua, condiciones del bioma y vecinos; no elegir solo por el nombre del bioma.
 4. **Subsuelo y minerales.** Replicar configuraciones de placed/configured features, distribución por altura, aleatoriedad y orden de aplicación.
 5. **Referencias doradas.** Exportar muestras de un mundo Java 1.21.1 real para varias semillas/coordenadas y comparar IDs de bioma, alturas, bloque por bloque, bordes de chunk y determinismo.
-6. **Prueba de semilla de cerezo.** Consultar Cubiomes real y guardar las coordenadas/IDs observados para `5890866665536842607`. `X=-508, Z=24` no es evidencia de bioma ni de spawn; es una coordenada de inspección heredada.
+6. **Prueba de semilla de cerezo.** Ya existe una búsqueda al iniciar para `5890866665536842607`: cuando Cubiomes está disponible, se muestrea `X/Z ±2048` cada 16 bloques y se escoge una muestra ID 185 cercana al origen. La búsqueda se añadió al código pero no se ejecutó durante esta sesión. Deben guardar sus coordenadas/ID como test dorado después de ejecutarla con el WASM y contrastarla con Java. La coordenada anterior `X=-508, Z=24` no se fuerza y no era evidencia de bioma ni de spawn.
 
 ## Criterios antes de quitar PREVIEW
 
