@@ -124,7 +124,7 @@ body { background:#000; overflow:hidden; font-family:'Segoe UI',sans-serif; }
     <div id="chunk-info">Chunk: 0, 0</div>
   </div>
   <div id="biome-hud">Bioma: --</div>
-  <div id="controls-hint">WASD mover · Espacio saltar · Shift lento · T o / comandos · ESC mouse</div>
+  <div id="controls-hint">WASD mover · Espacio saltar/subir en vuelo · Ctrl bajar · F alternar vuelo · Shift correr/boost · T o / comandos · ESC soltar mouse</div>
   <div id="seed-bar">
     <span style="color:#aaa;font-size:12px">Semilla:</span>
     <input id="seed-in" type="text" value="5890866665536842607">
@@ -143,6 +143,12 @@ body { background:#000; overflow:hidden; font-family:'Segoe UI',sans-serif; }
 
 <script src="./js/cubiomes-adapter.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="./src/core/gameState.js"></script>
+<script src="./src/renderer/voxelMaterials.js"></script>
+<script src="./src/world/chunkScheduler.js"></script>
+<script src="./src/generator/biomeGenerator.js"></script>
+<script src="./src/generator/terrainGenerator.js"></script>
+<script src="./src/controls/flyControls.js"></script>
 <script>
 // ─────────────────────────────────────────────
 // JAVA RANDOM
@@ -189,12 +195,8 @@ function seedFromString(str) {
 // No se activa un fallback silencioso: hasta conectar y validar un core
 // Java 1.21.x real, el estado se muestra explícitamente como PREVIEW.
 // ─────────────────────────────────────────────
-const WORLDGEN_TARGET = Object.freeze({ edition: 'Java', version: '1.21.1' });
-const WORLDGEN_STATUS = Object.freeze({
-  exact: false,
-  stage: 'preview-legacy',
-  reason: 'BiomeGen/HeightGen son aproximaciones; falta el core vanilla validado.'
-});
+const WORLDGEN_TARGET = window.VoxelCraftCore.target;
+const WORLDGEN_STATUS = window.VoxelCraftCore.status;
 
 // ─────────────────────────────────────────────
 // PERLIN NOISE
@@ -256,6 +258,13 @@ const BIOME_DEFS = {
   SWAMP:        {name:'Pantano',          grass:0x4a6629,dirt:0x3b3b1e,stone:0x888888,trees:'oak'},
   MEADOW:       {name:'Pradera',          grass:0x79c24b,dirt:0x8B6343,stone:0x888888},
   CHERRY_GROVE: {name:'Bosque Cerezo 🌸', grass:0xc8f0c8,dirt:0x8B6343,stone:0x888888,trees:'cherry'},
+  GROVE:        {name:'Arboleda',         grass:0x9eb69c,dirt:0x8B6343,stone:0x888888,snow:true,trees:'spruce'},
+  JAGGED_PEAKS: {name:'Picos Escarpados', grass:0xa0a0a0,dirt:0x888888,stone:0x606060},
+  FROZEN_PEAKS: {name:'Picos Helados',    grass:0xeef5ff,dirt:0xc0d8f0,stone:0x888888,snow:true},
+  DEEP_DARK:    {name:'Oscuridad Profunda',grass:0x343b42,dirt:0x292d32,stone:0x25282c},
+  MANGROVE_SWAMP:{name:'Pantano de Manglares',grass:0x475f32,dirt:0x3b3b1e,stone:0x888888,trees:'jungle'},
+  BADLANDS:     {name:'Tierras Baldías',   grass:0xc47a45,dirt:0xb7633d,stone:0x9d563b},
+  UNKNOWN_BIOME:{name:'Bioma no reconocido',grass:0x777777,dirt:0x555555,stone:0x555555},
   MUSHROOM:     {name:'Champiñón',        grass:0x8b5da8,dirt:0x6b3d7d,stone:0x888888},
 };
 
@@ -296,7 +305,7 @@ class BiomeGen {
       if(E<-0.3) return 'STONY_PEAKS';
       return 'MOUNTAINS';
     }
-    if(T>-0.1&&T<0.35&&H>0.1&&H<0.5&&W<-0.25&&C>0.0) return 'CHERRY_GROVE';
+    // El fallback visual no inventa cerezos: ese bioma solo se confirma con Cubiomes real.
     if(T<-0.45) return H<0?'SNOWY_TAIGA':'SNOWY_SLOPES';
     if(T<-0.15) return 'TAIGA';
     if(T<0.2){
@@ -367,28 +376,17 @@ let yaw = 0, pitch = 0;
 let currentSeed = 0n;
 let worldData = {}; // cache de altura por bloque
 let frameCount = 0, lastFPSTime = 0, lastChunkUpdate = 0;
-const chunkBuildQueue = [];
-const queuedChunkKeys = new Set();
+const chunkScheduler = new window.VoxelCraftChunkScheduler();
+const chunkBuildPending = new Map(); // key -> world-generation token
 const MAX_CHUNKS_PER_FRAME = 1;
-let chunkQueueGeneration = 0;
+let worldBuildGeneration = 0;
 
 function hexToColor(hex) { return new THREE.Color(hex); }
 
 // Caché global de materiales — evita crear miles de objetos idénticos
 const _matCache = new Map();
 function makePixelTexture(hex) {
-  // Textura procedural pixel-art 16x16: variación sutil por bloque sin archivos externos.
-  const canvas=document.createElement('canvas'); canvas.width=canvas.height=16;
-  const ctx=canvas.getContext('2d');
-  let seed=(hex>>>0)^0x6d2b79f5;
-  const rand=()=>{ seed=(Math.imul(seed^(seed>>>15),1|seed)); seed^=seed+Math.imul(seed^(seed>>>7),61|seed); return ((seed^(seed>>>14))>>>0)/4294967296; };
-  for(let y=0;y<16;y++) for(let x=0;x<16;x++) {
-    let v=Math.floor(174+rand()*82);
-    if((x+y)%7===0) v=Math.max(145,v-25);
-    if(rand()>.94) v=255;
-    ctx.fillStyle=`rgb(${v},${v},${v})`; ctx.fillRect(x,y,1,1);
-  }
-  const tex=new THREE.CanvasTexture(canvas); tex.magFilter=THREE.NearestFilter; tex.minFilter=THREE.NearestMipmapNearestFilter; tex.generateMipmaps=true; tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.needsUpdate=true; return tex;
+  return window.VoxelCraftVoxelMaterials.makePixelTexture(THREE, hex);
 }
 function makeMat(hex, opts={}) {
   const key = `${hex}_${opts.transparent||0}_${opts.opacity||1}`;
@@ -520,10 +518,12 @@ const MAX_SURFACE = MAX_COL * 4;                    // grass/dirt/sand/snow
 const MAX_WATER   = MAX_COL * 10;                   // agua superficial
 const MAX_BEDROCK = MAX_COL;                        // 256
 
-function buildChunk(cx,cz) {
-  const key=`${cx}|${cz}`;
-  if(chunkMeshes.has(key)) return;
-
+async function buildChunk(cx,cz) {
+  const key = cx + '|' + cz;
+  const generationToken = worldBuildGeneration;
+  if (chunkMeshes.has(key) || chunkBuildPending.get(key) === generationToken) return;
+  chunkBuildPending.set(key, generationToken);
+  try {
   const group = new THREE.Group();
   const rng = new JavaRandom(currentSeed ^ BigInt(cx*0x9e3779b9+cz*0x6c62272e));
 
@@ -540,76 +540,138 @@ function buildChunk(cx,cz) {
 
   const idx=(lx,lz)=>lx*CHUNK_SIZE+lz;
 
-  // ── Acumuladores para InstancedMesh por material ──────────────────
-  // Clave: color hex → {mat, matrices[]}
-  const instMap = new Map();
-
-  function addBlock(wx, y, wz, mat) {
-    const id = mat.uuid;
-    if (!instMap.has(id)) instMap.set(id, {mat, positions:[]});
-    instMap.get(id).positions.push(wx+.5, y+.5, wz+.5);
+  // Las columnas vienen de la caché de biomas y del HeightGen actual.
+  // El worker convierte los bloques de superficie en arrays de posiciones agrupadas por material.
+  const workerColumns = [];
+  for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+    for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+      const i = idx(lx, lz);
+      const bk = biomes[i];
+      const b = BIOME_DEFS[bk] || BIOME_DEFS.PLAINS;
+      workerColumns.push({
+        x: cx * CHUNK_SIZE + lx,
+        z: cz * CHUNK_SIZE + lz,
+        h: heights[i],
+        biomeKey: bk,
+        grass: b.grass || 0x7dbb6b,
+        dirt: b.dirt || 0x8B6343,
+        stone: b.stone || 0x888888,
+        water: !!b.water,
+        snow: !!b.snow,
+        desert: bk === 'DESERT',
+        beach: bk === 'BEACH'
+      });
+    }
   }
+  let surfacePlan = null;
+  try {
+    if (window.VoxelCraftTerrainGenerator) {
+      surfacePlan = await window.VoxelCraftTerrainGenerator.buildSurfacePlan(
+        workerColumns,
+        { seaLevel: SEA_LEVEL, stoneDepth: VISIBLE_STONE_DEPTH }
+      );
+    }
+  } catch (error) {
+    console.warn('[Terrain worker] Se usa el constructor local de emergencia:', error);
+  }
+  if (generationToken !== worldBuildGeneration) return;
+  const playerChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
+  const playerChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
+  if (Math.hypot(cx - playerChunkX, cz - playerChunkZ) > RENDER_CHUNKS + 1) return;
 
-  for(let lx=0;lx<CHUNK_SIZE;lx++) {
-    for(let lz=0;lz<CHUNK_SIZE;lz++) {
-      const wx=cx*CHUNK_SIZE+lx, wz=cz*CHUNK_SIZE+lz;
-      const h=heights[idx(lx,lz)];
-      const bk=biomes[idx(lx,lz)];
-      const bd=BIOME_DEFS[bk];
-      const isWater=bd.water;
-
-      // Bedrock — solo 1 bloque
-      addBlock(wx, 0, wz, MATS.bedrock);
-
-      // Stone — solo las últimas VISIBLE_STONE_DEPTH capas (no toda la columna)
-      const stoneTop = h-3;
-      const stoneBot = Math.max(1, stoneTop - VISIBLE_STONE_DEPTH);
-      const stoneMat = makeMat(bd.stone||0x888888);
-      for(let y=stoneBot; y<=stoneTop; y++) {
-        addBlock(wx, y, wz, stoneMat);
+  if (surfacePlan) {
+    for (const entry of surfacePlan.groups) {
+      const parts = entry.key.split('_');
+      const mat = makeMat(Number(parts[0]), {
+        transparent: parts[1] === 'true',
+        opacity: Number(parts[2]) || 1
+      });
+      const positions = entry.positions;
+      const count = positions.length / 3;
+      if (!count) continue;
+      const mesh = new THREE.InstancedMesh(_sharedGeoCube, mat, count);
+      mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+      for (let i = 0; i < count; i++) {
+        _dummy.position.set(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
+        _dummy.updateMatrix();
+        mesh.setMatrixAt(i, _dummy.matrix);
       }
-
-      if(isWater) {
-        // Suelo marino (3 capas de dirt/mud)
-        const dirtMat = makeMat(0x1a5276);
-        for(let y=h-2;y<=h;y++) addBlock(wx, y, wz, dirtMat);
-        // Agua hasta SEA_LEVEL
-        for(let y=h+1;y<=SEA_LEVEL;y++) {
-          const mat=bk==='FROZEN_OCEAN'&&y===SEA_LEVEL?MATS.ice:MATS.water;
-          addBlock(wx, y, wz, mat);
+      mesh.instanceMatrix.needsUpdate = true;
+      group.add(mesh);
+    }
+  } else {
+    // ── Acumuladores para InstancedMesh por material ──────────────────
+    // Clave: color hex → {mat, matrices[]}
+    const instMap = new Map();
+  
+    function addBlock(wx, y, wz, mat) {
+      const id = mat.uuid;
+      if (!instMap.has(id)) instMap.set(id, {mat, positions:[]});
+      instMap.get(id).positions.push(wx+.5, y+.5, wz+.5);
+    }
+  
+    for(let lx=0;lx<CHUNK_SIZE;lx++) {
+      for(let lz=0;lz<CHUNK_SIZE;lz++) {
+        const wx=cx*CHUNK_SIZE+lx, wz=cz*CHUNK_SIZE+lz;
+        const h=heights[idx(lx,lz)];
+        const bk=biomes[idx(lx,lz)];
+        const bd=BIOME_DEFS[bk];
+        const isWater=bd.water;
+  
+        // Bedrock — solo 1 bloque
+        addBlock(wx, 0, wz, MATS.bedrock);
+  
+        // Stone — solo las últimas VISIBLE_STONE_DEPTH capas (no toda la columna)
+        const stoneTop = h-3;
+        const stoneBot = Math.max(1, stoneTop - VISIBLE_STONE_DEPTH);
+        const stoneMat = makeMat(bd.stone||0x888888);
+        for(let y=stoneBot; y<=stoneTop; y++) {
+          addBlock(wx, y, wz, stoneMat);
         }
-      } else {
-        // Dirt 2 capas
-        const dirtMat = makeMat(bd.dirt||0x8B6343);
-        for(let y=h-2;y<h;y++) addBlock(wx, y, wz, dirtMat);
-
-        // Superficie
-        if(bk==='DESERT'||bk==='BEACH') {
-          addBlock(wx, h-1, wz, MATS.sand);
-          addBlock(wx, h,   wz, MATS.sand);
-        } else if(bd.snow) {
-          addBlock(wx, h,   wz, makeMat(bd.grass));
-          addBlock(wx, h+1, wz, MATS.snow);
+  
+        if(isWater) {
+          // Suelo marino (3 capas de dirt/mud)
+          const dirtMat = makeMat(0x1a5276);
+          for(let y=h-2;y<=h;y++) addBlock(wx, y, wz, dirtMat);
+          // Agua hasta SEA_LEVEL
+          for(let y=h+1;y<=SEA_LEVEL;y++) {
+            const mat=bk==='FROZEN_OCEAN'&&y===SEA_LEVEL?MATS.ice:MATS.water;
+            addBlock(wx, y, wz, mat);
+          }
         } else {
-          addBlock(wx, h, wz, makeMat(bd.grass));
+          // Dirt 2 capas
+          const dirtMat = makeMat(bd.dirt||0x8B6343);
+          for(let y=h-2;y<h;y++) addBlock(wx, y, wz, dirtMat);
+  
+          // Superficie
+          if(bk==='DESERT'||bk==='BEACH') {
+            addBlock(wx, h-1, wz, MATS.sand);
+            addBlock(wx, h,   wz, MATS.sand);
+          } else if(bd.snow) {
+            addBlock(wx, h,   wz, makeMat(bd.grass));
+            addBlock(wx, h+1, wz, MATS.snow);
+          } else {
+            addBlock(wx, h, wz, makeMat(bd.grass));
+          }
         }
       }
     }
-  }
-
-  // ── Convertir acumuladores en InstancedMesh ───────────────────────
-  for(const [, {mat, positions}] of instMap) {
-    const count = positions.length / 3;
-    if(count === 0) continue;
-    const instMesh = new THREE.InstancedMesh(_sharedGeoCube, mat, count);
-    instMesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
-    for(let i=0; i<count; i++) {
-      _dummy.position.set(positions[i*3], positions[i*3+1], positions[i*3+2]);
-      _dummy.updateMatrix();
-      instMesh.setMatrixAt(i, _dummy.matrix);
+  
+    // ── Convertir acumuladores en InstancedMesh ───────────────────────
+    for(const [, {mat, positions}] of instMap) {
+      const count = positions.length / 3;
+      if(count === 0) continue;
+      const instMesh = new THREE.InstancedMesh(_sharedGeoCube, mat, count);
+      instMesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+      for(let i=0; i<count; i++) {
+        _dummy.position.set(positions[i*3], positions[i*3+1], positions[i*3+2]);
+        _dummy.updateMatrix();
+        instMesh.setMatrixAt(i, _dummy.matrix);
+      }
+      instMesh.instanceMatrix.needsUpdate = true;
+      group.add(instMesh);
     }
-    instMesh.instanceMatrix.needsUpdate = true;
-    group.add(instMesh);
+  
   }
 
   // Árboles de preview: decidir tipo según el bioma de la coordenada exacta,
@@ -628,8 +690,12 @@ function buildChunk(cx,cz) {
     }
   }
 
+  if (generationToken !== worldBuildGeneration) return;
   scene.add(group);
   chunkMeshes.set(key,group);
+  } finally {
+    if (chunkBuildPending.get(key) === generationToken) chunkBuildPending.delete(key);
+  }
 }
 
 function removeChunk(cx,cz) {
@@ -644,39 +710,38 @@ function removeChunk(cx,cz) {
 }
 
 function updateChunks() {
-  const px=Math.floor(camera.position.x/CHUNK_SIZE);
-  const pz=Math.floor(camera.position.z/CHUNK_SIZE);
-  const needed=new Set();
-
-  for(let dx=-RENDER_CHUNKS;dx<=RENDER_CHUNKS;dx++) {
-    for(let dz=-RENDER_CHUNKS;dz<=RENDER_CHUNKS;dz++) {
-      if(dx*dx+dz*dz>RENDER_CHUNKS*RENDER_CHUNKS) continue;
-      const cx=px+dx,cz=pz+dz,key=`${cx}|${cz}`;
+  const px = Math.floor(camera.position.x / CHUNK_SIZE);
+  const pz = Math.floor(camera.position.z / CHUNK_SIZE);
+  const needed = new Set();
+  for (let dx = -RENDER_CHUNKS; dx <= RENDER_CHUNKS; dx++) {
+    for (let dz = -RENDER_CHUNKS; dz <= RENDER_CHUNKS; dz++) {
+      if (dx * dx + dz * dz > RENDER_CHUNKS * RENDER_CHUNKS) continue;
+      const cx = px + dx, cz = pz + dz, key = cx + '|' + cz;
       needed.add(key);
-      if(!chunkMeshes.has(key) && !queuedChunkKeys.has(key)) {
-        chunkBuildQueue.push({cx,cz,key});
-        queuedChunkKeys.add(key);
+      if (!chunkMeshes.has(key) && !chunkScheduler.has(key) &&
+          chunkBuildPending.get(key) !== worldBuildGeneration) {
+        chunkScheduler.enqueue({ cx: cx, cz: cz, key: key });
       }
     }
   }
-  // Descarta solicitudes que ya quedaron lejos; evita que la cola crezca al correr.
-  for(let i=chunkBuildQueue.length-1;i>=0;i--) {
-    if(!needed.has(chunkBuildQueue[i].key)) {
-      queuedChunkKeys.delete(chunkBuildQueue[i].key);
-      chunkBuildQueue.splice(i,1);
-    }
-  }
-  for(const [k] of chunkMeshes) {
-    if(!needed.has(k)) removeChunk(...k.split('|').map(Number));
+  // Elimina trabajos de chunks que ya quedaron fuera del radio de renderizado.
+  chunkScheduler.retain(needed);
+  for (const [key] of chunkMeshes) {
+    if (!needed.has(key)) removeChunk(...key.split('|').map(Number));
   }
 }
 
 function processChunkQueue() {
-  let built=0;
-  while(chunkBuildQueue.length && built<MAX_CHUNKS_PER_FRAME) {
-    const item=chunkBuildQueue.shift();
-    queuedChunkKeys.delete(item.key);
-    if(!chunkMeshes.has(item.key)) buildChunk(item.cx,item.cz);
+  let built = 0;
+  while (chunkScheduler.length > 0 && built < MAX_CHUNKS_PER_FRAME) {
+    const item = chunkScheduler.take();
+    if (!item) break;
+    if (!chunkMeshes.has(item.key) &&
+        chunkBuildPending.get(item.key) !== worldBuildGeneration) {
+      void buildChunk(item.cx, item.cz).catch(function (error) {
+        console.error('[Chunk] No se pudo construir ' + item.key, error);
+      });
+    }
     built++;
   }
 }
@@ -706,11 +771,18 @@ function updatePlayer(dt) {
   if(keys['KeyD']||keys['ArrowRight']) dir.add(right);
   if(dir.lengthSq()>0) dir.normalize().multiplyScalar(speed);
 
-  const shift=keys['ShiftLeft']||keys['ShiftRight'];
-  dir.multiplyScalar(shift?0.4:1);
-
-  camera.position.x+=dir.x*dt;
-  camera.position.z+=dir.z*dt;
+  const shift = keys['ShiftLeft'] || keys['ShiftRight'];
+  const flying = !!(window.VoxelCraftFlyControls && window.VoxelCraftFlyControls.isFlying());
+  dir.multiplyScalar(flying && shift ? 2.5 : (shift ? 0.4 : 1));
+  camera.position.x += dir.x * dt;
+  camera.position.z += dir.z * dt;
+  if (flying) {
+    const vertical = window.VoxelCraftFlyControls.verticalAxis(keys);
+    camera.position.y += vertical * speed * (shift ? 2.5 : 1) * dt;
+    playerVel.y = 0;
+    onGround = false;
+    return;
+  }
 
   playerVel.y-=gravity*dt;
   camera.position.y+=playerVel.y*dt;
@@ -754,8 +826,10 @@ function initThree() {
 }
 
 async function buildInitialWorld(seed, onProg) {
-  worldData={}; worldDataSize=0;
-  chunkBuildQueue.length=0; queuedChunkKeys.clear();
+  worldBuildGeneration++;
+  worldData = {};
+  worldDataSize = 0;
+  chunkScheduler.clear();
   currentSeed=seed;
   biomeGen=new BiomeGen(seed);
   heightGen=new HeightGen(seed);
@@ -770,13 +844,13 @@ async function buildInitialWorld(seed, onProg) {
 
   // Load real Java biome data and cache a 4-block grid around the spawn region.
   // This does NOT make block heights/terrain fully vanilla; those are still approximate.
-  if(window.CubiomesAdapter) {
+  if(window.VoxelCraftBiomeGenerator || window.CubiomesAdapter) {
     try {
-      document.getElementById('prog-label').textContent='Cargando Cubiomes Java 1.21.1...';
+      document.getElementById('prog-label').textContent='Cargando Cubiomes Java 1.21.1 en worker...';
       const radius=(RENDER_CHUNKS+1)*CHUNK_SIZE;
       const topX=Math.floor((startX-radius)/4)*4, topZ=Math.floor((startZ-radius)/4)*4;
       const n=Math.ceil((radius*2)/4)+1;
-      const ids=await window.CubiomesAdapter.generateMap({x:topX,z:topZ,width:n,height:n,step:4,y:80,seed:seed.toString()});
+      const ids=await window.VoxelCraftBiomeGenerator.generateMap({x:topX,z:topZ,width:n,height:n,step:4,y:80,seed:seed.toString()});
       for(let rz=0;rz<n;rz++) for(let rx=0;rx<n;rx++) exactBiomeCache.set(`${topX+rx*4}|${topZ+rz*4}`,ids[rz*n+rx]);
       document.getElementById('prog-label').textContent='Biomas Cubiomes cargados; preparando terreno aproximado y árboles por bioma...';
     } catch(err) {
@@ -799,7 +873,7 @@ async function buildInitialWorld(seed, onProg) {
   for(let dx=-RENDER_CHUNKS;dx<=RENDER_CHUNKS;dx++) {
     for(let dz=-RENDER_CHUNKS;dz<=RENDER_CHUNKS;dz++) {
       if(dx*dx+dz*dz<=RENDER_CHUNKS*RENDER_CHUNKS) {
-        buildChunk(baseChunkX+dx,baseChunkZ+dz);
+        await buildChunk(baseChunkX+dx,baseChunkZ+dz);
         done++;
         onProg(done/total*100);
         if(done%2===0) await new Promise(r=>requestAnimationFrame(r));
@@ -834,7 +908,8 @@ function loop() {
   const p=camera.position;
   document.getElementById('pos').textContent=`XYZ: ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}`;
   const cx=Math.floor(p.x/CHUNK_SIZE),cz=Math.floor(p.z/CHUNK_SIZE);
-  document.getElementById('chunk-info').textContent=`Chunk: ${cx}, ${cz}`;
+  const isFlying = !!(window.VoxelCraftFlyControls && window.VoxelCraftFlyControls.isFlying());
+  document.getElementById('chunk-info').textContent=`Chunk: ${cx}, ${cz}${isFlying ? ' · VUELO' : ''}`;
 
   const {h,bk}=getWorldHeight(Math.floor(p.x),Math.floor(p.z));
   document.getElementById('biome-hud').textContent=`🌍 ${(BIOME_DEFS[bk]||{}).name||bk}`;
@@ -867,6 +942,13 @@ function setupInput() {
     if(e.target && (e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA')) return;
     if((e.key==='/' || e.code==='KeyT') && commandBar.classList.contains('hidden')) { e.preventDefault(); openCommand(); return; }
     if(!commandBar.classList.contains('hidden')) return;
+    if (e.code === 'KeyF' && window.VoxelCraftFlyControls) {
+      e.preventDefault();
+      const flyingNow = window.VoxelCraftFlyControls.toggle();
+      playerVel.set(0, 0, 0);
+      console.info('[Controls] Vuelo ' + (flyingNow ? 'activado' : 'desactivado'));
+      return;
+    }
     keys[e.code]=true;
     if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
   });
@@ -876,6 +958,7 @@ function setupInput() {
 async function regenWorld() {
   const seedStr=document.getElementById('seed-in').value;
   const seed=seedFromString(seedStr);
+  if (window.VoxelCraftFlyControls) window.VoxelCraftFlyControls.disable();
   document.getElementById('loading').style.display='flex';
   document.getElementById('hud').classList.add('hidden');
   biomeMapPanel.classList.add('hidden');
@@ -896,8 +979,8 @@ let biomeMapOrigin = { x:0, z:0 };
 let biomeMapStep = 32;
 let biomeMapCells = [];
 let biomeMapUsingCubiomes = false;
-const CUBIOMES_BIOME_KEYS = {0:'OCEAN',1:'PLAINS',2:'DESERT',3:'MOUNTAINS',4:'FOREST',5:'TAIGA',6:'SWAMP',7:'RIVER',10:'FROZEN_OCEAN',11:'RIVER',12:'SNOWY_SLOPES',13:'SNOWY_SLOPES',14:'MUSHROOM',15:'MUSHROOM',16:'BEACH',17:'DESERT',18:'FOREST',19:'TAIGA',20:'MOUNTAINS',21:'JUNGLE',22:'JUNGLE',23:'JUNGLE',24:'DEEP_OCEAN',25:'STONY_PEAKS',26:'BEACH',27:'BIRCH_FOREST',28:'BIRCH_FOREST',29:'DARK_FOREST',30:'SNOWY_TAIGA',31:'SNOWY_TAIGA',32:'TAIGA',33:'TAIGA',34:'MOUNTAINS',35:'SAVANNA',36:'SAVANNA',37:'BADLANDS',38:'BADLANDS',39:'BADLANDS',44:'OCEAN',45:'OCEAN',46:'OCEAN',47:'DEEP_OCEAN',48:'DEEP_OCEAN',49:'DEEP_OCEAN',50:'FROZEN_OCEAN',52:'FOREST',53:'PLAINS',168:'JUNGLE',170:'DESERT',171:'DARK_FOREST',172:'DARK_FOREST',173:'STONY_PEAKS',174:'MOUNTAINS',175:'FOREST',177:'MEADOW',178:'TAIGA',179:'SNOWY_SLOPES',180:'MOUNTAINS',181:'SNOWY_SLOPES',182:'STONY_PEAKS',183:'DARK_FOREST',184:'SWAMP',185:'CHERRY_GROVE',186:'DARK_FOREST'};
-function cubiomesKey(id) { return CUBIOMES_BIOME_KEYS[id] || 'PLAINS'; }
+const CUBIOMES_BIOME_KEYS = {0:'OCEAN',1:'PLAINS',2:'DESERT',3:'MOUNTAINS',4:'FOREST',5:'TAIGA',6:'SWAMP',7:'RIVER',10:'FROZEN_OCEAN',11:'RIVER',12:'SNOWY_TAIGA',13:'SNOWY_SLOPES',14:'MUSHROOM',15:'MUSHROOM',16:'BEACH',17:'DESERT',18:'FOREST',19:'TAIGA',20:'MOUNTAINS',21:'JUNGLE',22:'JUNGLE',23:'JUNGLE',24:'DEEP_OCEAN',25:'STONY_PEAKS',26:'BEACH',27:'BIRCH_FOREST',28:'BIRCH_FOREST',29:'DARK_FOREST',30:'SNOWY_TAIGA',31:'SNOWY_TAIGA',32:'TAIGA',33:'TAIGA',34:'MOUNTAINS',35:'SAVANNA',36:'SAVANNA',37:'BADLANDS',38:'BADLANDS',39:'BADLANDS',44:'OCEAN',45:'OCEAN',46:'OCEAN',47:'DEEP_OCEAN',48:'DEEP_OCEAN',49:'DEEP_OCEAN',50:'FROZEN_OCEAN',52:'FOREST',53:'JUNGLE',168:'JUNGLE',169:'JUNGLE',177:'MEADOW',178:'GROVE',179:'SNOWY_SLOPES',180:'JAGGED_PEAKS',181:'FROZEN_PEAKS',182:'STONY_PEAKS',183:'DEEP_DARK',184:'MANGROVE_SWAMP',185:'CHERRY_GROVE',186:'UNKNOWN_BIOME'};
+function cubiomesKey(id) { return CUBIOMES_BIOME_KEYS[id] || 'UNKNOWN_BIOME'; }
 function biomeColor(key) {
   const b=BIOME_DEFS[key]||BIOME_DEFS.PLAINS;
   const n=b.grass ?? b.stone ?? 0x7dbb6b;
@@ -911,7 +994,7 @@ async function renderBiomeMap() {
   if(window.CubiomesAdapter) {
     try {
       const topX=Math.round(ox-(size/2)*biomeMapStep), topZ=Math.round(oz-(size/2)*biomeMapStep);
-      ids=await window.CubiomesAdapter.generateMap({x:topX,z:topZ,width:size,height:size,step:biomeMapStep,y:80,seed});
+      ids=await window.VoxelCraftBiomeGenerator.generateMap({x:topX,z:topZ,width:size,height:size,step:biomeMapStep,y:80,seed});
       biomeMapUsingCubiomes=true;
     } catch(err) {
       biomeMapUsingCubiomes=false;
