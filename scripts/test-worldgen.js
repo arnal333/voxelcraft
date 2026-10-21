@@ -16,9 +16,9 @@ const read = (relativePath) => fs.readFileSync(path.join(ROOT, relativePath), 'u
 const passed = [];
 const failed = [];
 
-function test(name, run) {
+async function test(name, run) {
   try {
-    run();
+    await run();
     passed.push(name);
     console.log('PASS  ' + name);
   } catch (error) {
@@ -27,8 +27,9 @@ function test(name, run) {
   }
 }
 
+async function main() {
 // Parse inline JavaScript from the HTML without executing browser APIs.
-test('index.html inline JavaScript parses', () => {
+  await test('index.html inline JavaScript parses', () => {
   const html = read('index.html');
   const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)]
     .map((match) => match[1])
@@ -37,7 +38,7 @@ test('index.html inline JavaScript parses', () => {
   for (const source of scripts) new Function(source); // eslint-disable-line no-new-func
 });
 
-test('all modular JavaScript files parse', () => {
+  await test('all modular JavaScript files parse', () => {
   const files = [
     'js/cubiomes-adapter.js',
     'src/core/gameState.js',
@@ -53,7 +54,7 @@ test('all modular JavaScript files parse', () => {
   for (const file of files) new Function(read(file)); // eslint-disable-line no-new-func
 });
 
-test('world generator coordinator delegates the two stages', () => {
+  await test('world generator coordinator delegates the two stages', () => {
   const calls = [];
   const sandbox = {
     window: {
@@ -76,7 +77,7 @@ test('world generator coordinator delegates the two stages', () => {
   });
 });
 
-test('chunk scheduler deduplicates and drops distant work', () => {
+  await test('chunk scheduler deduplicates and drops distant work', () => {
   const sandbox = { window: {} };
   vm.runInNewContext(read('src/world/chunkScheduler.js'), sandbox);
   const scheduler = new sandbox.window.VoxelCraftChunkScheduler();
@@ -89,7 +90,7 @@ test('chunk scheduler deduplicates and drops distant work', () => {
   assert.equal(scheduler.take(), null);
 });
 
-test('terrain worker groups positions into transferable typed arrays', () => {
+  await test('terrain worker groups positions into transferable typed arrays', () => {
   const replies = [];
   const sandbox = {
     self: { postMessage: (message, transfer) => replies.push({ message, transfer }) }
@@ -118,7 +119,7 @@ test('terrain worker groups positions into transferable typed arrays', () => {
   }
 });
 
-test('fly controller toggles and returns the expected vertical input', () => {
+  await test('fly controller toggles and returns the expected vertical input', () => {
   const sandbox = { window: {} };
   vm.runInNewContext(read('src/controls/flyControls.js'), sandbox);
   const flight = sandbox.window.VoxelCraftFlyControls;
@@ -132,7 +133,7 @@ test('fly controller toggles and returns the expected vertical input', () => {
   assert.equal(flight.isFlying(), false);
 });
 
-test('Cubiomes biome IDs stay explicit and cherry is not fabricated by fallback', () => {
+  await test('Cubiomes biome IDs stay explicit and cherry is not fabricated by fallback', () => {
   const html = read('index.html');
   const line = html.split('\n').find((entry) => entry.startsWith('const CUBIOMES_BIOME_KEYS = '));
   assert.ok(line, 'Biome mapping missing.');
@@ -147,7 +148,7 @@ test('Cubiomes biome IDs stay explicit and cherry is not fabricated by fallback'
   assert.ok(!html.includes("return 'CHERRY_GROVE';"), 'The approximate fallback must not invent Cherry Grove.');
 });
 
-test('WASM build pins Cubiomes and exports the stable bridge API', () => {
+  await test('WASM build pins Cubiomes and exports the stable bridge API', () => {
   const build = read('scripts/build-cubiomes-wasm.sh');
   const bridge = read('engine/cubiomes-bridge.c');
   assert.ok(build.includes('e61f90580cbdd883214a8054670dacae655e59c0'));
@@ -164,3 +165,9 @@ test('WASM build pins Cubiomes and exports the stable bridge API', () => {
 console.log('\n' + passed.length + ' passed, ' + failed.length + ' failed.');
 if (failed.length) process.exitCode = 1;
 else console.log('NOTE  Browser runtime, WASM build, and vanilla seed parity must still be tested separately.');
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
