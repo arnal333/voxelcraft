@@ -838,30 +838,86 @@ async function buildInitialWorld(seed, onProg) {
   heightGen=new HeightGen(seed);
   clearExactBiomeCache();
 
-  // The reference link supplied for this seed was centered at X=-508, Z=24.
-  // Start there for this test seed so the user can inspect the cherry-grove area.
+  // Este seed pidió iniciar cerca de un bosque de cerezos. La ubicación anterior
+  // (-508, 24) nunca quedó verificada: ahora solo se acepta si Cubiomes confirma ID 185.
   const referenceSeed = 5890866665536842607n;
-  const startX = seed === referenceSeed ? -508 : 8;
-  const startZ = seed === referenceSeed ? 24 : 8;
-  const baseChunkX=Math.floor(startX/CHUNK_SIZE), baseChunkZ=Math.floor(startZ/CHUNK_SIZE);
+  const wantsCherrySpawn = seed === referenceSeed;
+  let startX = 8;
+  let startZ = 8;
+  let cherrySearchStatus = '';
 
-  // Load real Java biome data and cache a 4-block grid around the spawn region.
-  // This does NOT make block heights/terrain fully vanilla; those are still approximate.
-  if(window.VoxelCraftBiomeGenerator || window.CubiomesAdapter) {
+  if (window.VoxelCraftBiomeGenerator) {
     try {
-      document.getElementById('prog-label').textContent='Cargando Cubiomes Java 1.21.1 en worker...';
-      const radius=(RENDER_CHUNKS+1)*CHUNK_SIZE;
-      const topX=Math.floor((startX-radius)/4)*4, topZ=Math.floor((startZ-radius)/4)*4;
-      const n=Math.ceil((radius*2)/4)+1;
-      const ids=await window.VoxelCraftBiomeGenerator.generateMap({x:topX,z:topZ,width:n,height:n,step:4,y:80,seed:seed.toString()});
-      for(let rz=0;rz<n;rz++) for(let rx=0;rx<n;rx++) exactBiomeCache.set(`${topX+rx*4}|${topZ+rz*4}`,ids[rz*n+rx]);
-      document.getElementById('prog-label').textContent='Biomas Cubiomes cargados; preparando terreno aproximado y árboles por bioma...';
-    } catch(err) {
-      console.warn('[Cubiomes] No se pudo cargar el motor real:',err);
-      document.getElementById('prog-label').textContent='AVISO: motor Cubiomes no disponible; el terreno será una aproximación.';
+      if (wantsCherrySpawn) {
+        document.getElementById('prog-label').textContent =
+          'Buscando un bosque de cerezos real con Cubiomes Java 1.21.1...';
+        // Search a 4096 x 4096 block area at 16-block spacing in a Worker.
+        // This is a nearest-biome inspection start, not a claim about vanilla spawn.
+        const searchStep = 16;
+        const searchSize = 257;
+        const searchStart = -2048;
+        const searchIds = await window.VoxelCraftBiomeGenerator.generateMap({
+          x: searchStart, z: searchStart,
+          width: searchSize, height: searchSize,
+          step: searchStep, y: 80, seed: seed.toString()
+        });
+        let bestDistance = Infinity;
+        let cherryX = null, cherryZ = null;
+        for (let row = 0; row < searchSize; row++) {
+          for (let col = 0; col < searchSize; col++) {
+            if (searchIds[row * searchSize + col] !== 185) continue;
+            const x = searchStart + col * searchStep;
+            const z = searchStart + row * searchStep;
+            const distance = x * x + z * z;
+            if (distance < bestDistance) {
+              bestDistance = distance;
+              cherryX = x;
+              cherryZ = z;
+            }
+          }
+        }
+        if (cherryX !== null) {
+          startX = cherryX;
+          startZ = cherryZ;
+          cherrySearchStatus = 'Cubiomes confirmó Cherry Grove cerca de X=' + startX + ', Z=' + startZ + '.';
+        } else {
+          cherrySearchStatus = 'No se halló Cherry Grove dentro de ±2048 bloques; se usa inicio de inspección X=8, Z=8.';
+        }
+      }
+
+      document.getElementById('prog-label').textContent =
+        wantsCherrySpawn ? 'Cargando biomas alrededor del punto confirmado...' : 'Cargando biomas Java 1.21.1 en Worker...';
+      const radius = (RENDER_CHUNKS + 1) * CHUNK_SIZE;
+      const topX = Math.floor((startX - radius) / 4) * 4;
+      const topZ = Math.floor((startZ - radius) / 4) * 4;
+      const n = Math.ceil((radius * 2) / 4) + 1;
+      const ids = await window.VoxelCraftBiomeGenerator.generateMap({
+        x: topX, z: topZ, width: n, height: n, step: 4, y: 80, seed: seed.toString()
+      });
+      for (let rz = 0; rz < n; rz++) {
+        for (let rx = 0; rx < n; rx++) {
+          exactBiomeCache.set((topX + rx * 4) + '|' + (topZ + rz * 4), ids[rz * n + rx]);
+        }
+      }
+      document.getElementById('prog-label').textContent =
+        (cherrySearchStatus || 'Biomas Cubiomes cargados.') +
+        ' Alturas y topografía 3D siguen siendo preview.';
+    } catch (err) {
+      console.warn('[Cubiomes] No se pudo verificar el motor real:', err);
+      cherrySearchStatus = wantsCherrySpawn
+        ? 'Cubiomes no disponible: no se puede confirmar el bioma de cerezo; se usa inicio preview X=8, Z=8.'
+        : 'Cubiomes no disponible: biomas en modo preview.';
+      startX = 8;
+      startZ = 8;
+      document.getElementById('prog-label').textContent = cherrySearchStatus;
+      clearExactBiomeCache();
     }
+  } else if (wantsCherrySpawn) {
+    cherrySearchStatus = 'Cubiomes no disponible: no se puede confirmar el bioma de cerezo; se usa inicio preview X=8, Z=8.';
   }
 
+  const baseChunkX = Math.floor(startX / CHUNK_SIZE);
+  const baseChunkZ = Math.floor(startZ / CHUNK_SIZE);
   // Limpiar chunks viejos
   for(const [k] of chunkMeshes) removeChunk(...k.split('|').map(Number));
   chunkMeshes.clear();
