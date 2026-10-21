@@ -44,6 +44,16 @@ Para generar información de depuración de Emscripten/source maps:
 DEBUG=1 bash scripts/build-cubiomes-wasm.sh
 ```
 
+## Pruebas de humo
+
+Desde la raíz del repositorio, con Node.js:
+
+```bash
+node scripts/test-worldgen.js
+```
+
+Estas pruebas comprueban sintaxis, cola de chunks, arrays transferibles del worker, controles de vuelo, mapeo de IDs y símbolos del puente. No sustituyen la prueba de navegador ni la comparación bloque por bloque con Java 1.21.1.
+
 El archivo compilado `engine/cubiomes.js` y el correspondiente `engine/cubiomes.wasm` se generan localmente; no se suben en este cambio. Si no están construidos, el juego puede entrar en modo aproximado y avisar de ello.
 
 ## Controles
