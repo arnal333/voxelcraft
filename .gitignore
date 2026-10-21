@@ -1,0 +1,7 @@
+# Locally extracted Mojang world-generation reference data (do not commit redistributed game assets).
+/data/vanilla-1.21.1/
+
+# Locally built Emscripten output; generated from the pinned Cubiomes source.
+/engine/cubiomes.js
+/engine/cubiomes.wasm
+/engine/vendor/cubiomes/
