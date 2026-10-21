@@ -243,6 +243,7 @@ const BIOME_DEFS = {
   FROZEN_OCEAN: {name:'Océano Helado',    grass:0xb3d9f0,dirt:0x6eb3d4,stone:0x2c3e50,water:true},
   BEACH:        {name:'Playa',            grass:0xf5e6a3,dirt:0xd4c276,stone:0x9e8a50},
   RIVER:        {name:'Río',              grass:0x5dade2,dirt:0x2e86c1,stone:0x2c3e50,water:true},
+  FROZEN_RIVER: {name:'Río Helado',       grass:0xb3d9f0,dirt:0x6eb3d4,stone:0x2c3e50,water:true},
   PLAINS:       {name:'Llanuras',         grass:0x7dbb6b,dirt:0x8B6343,stone:0x888888},
   FOREST:       {name:'Bosque',           grass:0x4a7c4e,dirt:0x8B6343,stone:0x888888,trees:'oak'},
   BIRCH_FOREST: {name:'Bosque Abedul',    grass:0x5e9c5e,dirt:0x8B6343,stone:0x888888,trees:'birch'},
@@ -679,7 +680,7 @@ async function buildChunk(cx,cz) {
           for(let y=h-2;y<=h;y++) addBlock(wx, y, wz, dirtMat);
           // Agua hasta SEA_LEVEL
           for(let y=h+1;y<=SEA_LEVEL;y++) {
-            const mat=bk==='FROZEN_OCEAN'&&y===SEA_LEVEL?MATS.ice:MATS.water;
+            const mat=(bk==='FROZEN_OCEAN'||bk==='FROZEN_RIVER')&&y===SEA_LEVEL?MATS.ice:MATS.water;
             addBlock(wx, y, wz, mat);
           }
         } else {
@@ -1092,7 +1093,7 @@ let biomeMapOrigin = { x:0, z:0 };
 let biomeMapStep = 32;
 let biomeMapCells = [];
 let biomeMapUsingCubiomes = false;
-const CUBIOMES_BIOME_KEYS = {0:'OCEAN',1:'PLAINS',2:'DESERT',3:'MOUNTAINS',4:'FOREST',5:'TAIGA',6:'SWAMP',7:'RIVER',10:'FROZEN_OCEAN',11:'RIVER',12:'SNOWY_PLAINS',13:'UNKNOWN_BIOME',14:'MUSHROOM',15:'MUSHROOM',16:'BEACH',17:'DESERT',18:'FOREST',19:'TAIGA',20:'MOUNTAINS',21:'JUNGLE',22:'JUNGLE',23:'JUNGLE',24:'DEEP_OCEAN',25:'STONY_SHORE',26:'SNOWY_BEACH',27:'BIRCH_FOREST',28:'BIRCH_FOREST',29:'DARK_FOREST',30:'SNOWY_TAIGA',31:'SNOWY_TAIGA',32:'TAIGA',33:'TAIGA',34:'MOUNTAINS',35:'SAVANNA',36:'SAVANNA',37:'BADLANDS',38:'BADLANDS',39:'BADLANDS',44:'OCEAN',45:'OCEAN',46:'OCEAN',47:'DEEP_OCEAN',48:'DEEP_OCEAN',49:'DEEP_OCEAN',50:'FROZEN_OCEAN',168:'JUNGLE',169:'JUNGLE',177:'MEADOW',178:'GROVE',179:'SNOWY_SLOPES',180:'JAGGED_PEAKS',181:'FROZEN_PEAKS',182:'STONY_PEAKS',183:'DEEP_DARK',184:'MANGROVE_SWAMP',185:'CHERRY_GROVE',186:'UNKNOWN_BIOME'};
+const CUBIOMES_BIOME_KEYS = {0:'OCEAN',1:'PLAINS',2:'DESERT',3:'MOUNTAINS',4:'FOREST',5:'TAIGA',6:'SWAMP',7:'RIVER',10:'FROZEN_OCEAN',11:'FROZEN_RIVER',12:'SNOWY_PLAINS',13:'UNKNOWN_BIOME',14:'MUSHROOM',15:'MUSHROOM',16:'BEACH',17:'DESERT',18:'FOREST',19:'TAIGA',20:'MOUNTAINS',21:'JUNGLE',22:'JUNGLE',23:'JUNGLE',24:'DEEP_OCEAN',25:'STONY_SHORE',26:'SNOWY_BEACH',27:'BIRCH_FOREST',28:'BIRCH_FOREST',29:'DARK_FOREST',30:'SNOWY_TAIGA',31:'SNOWY_TAIGA',32:'TAIGA',33:'TAIGA',34:'MOUNTAINS',35:'SAVANNA',36:'SAVANNA',37:'BADLANDS',38:'BADLANDS',39:'BADLANDS',44:'OCEAN',45:'OCEAN',46:'OCEAN',47:'DEEP_OCEAN',48:'DEEP_OCEAN',49:'DEEP_OCEAN',50:'FROZEN_OCEAN',168:'JUNGLE',169:'JUNGLE',177:'MEADOW',178:'GROVE',179:'SNOWY_SLOPES',180:'JAGGED_PEAKS',181:'FROZEN_PEAKS',182:'STONY_PEAKS',183:'DEEP_DARK',184:'MANGROVE_SWAMP',185:'CHERRY_GROVE',186:'UNKNOWN_BIOME'};
 function cubiomesKey(id) { return CUBIOMES_BIOME_KEYS[id] || 'UNKNOWN_BIOME'; }
 function biomeColor(key) {
   const b=BIOME_DEFS[key]||BIOME_DEFS.PLAINS;
@@ -1145,7 +1146,7 @@ async function renderBiomeMap() {
     note.style.color='#a6efb3';
     readout.textContent=`Semilla: ${seed} · Centro: X ${ox}, Z ${oz} · Escala: ${biomeMapStep} bloques/píxel · Biomas calculados por Cubiomes.`;
   } else {
-    note.textContent='VISTA PREVIA APROXIMADA: no se pudo cargar Cubiomes WASM. Los biomas pueden no coincidir con Java 1.21.1. Comprueba tu conexión y vuelve a cargar la página.';
+    note.textContent='VISTA PREVIA APROXIMADA: no se encontró el WASM local de Cubiomes. Los biomas pueden no coincidir con Java 1.21.1. Compila el motor con scripts/build-cubiomes-wasm.sh para verificar los biomas reales.';
     note.style.color='#ffcf8a';
     readout.textContent=`Semilla: ${seed} · Centro: X ${ox}, Z ${oz} · Escala: ${biomeMapStep} bloques/píxel · Preview no oficial.`;
   }
