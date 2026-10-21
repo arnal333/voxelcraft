@@ -3,8 +3,19 @@ name: World-generation smoke tests
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'engine/cubiomes.js'
+      - 'engine/cubiomes.wasm'
+      - 'engine/CUBIOMES-LICENSE.txt'
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: worldgen-build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   smoke-tests:
@@ -22,6 +33,7 @@ jobs:
           docker run --rm -v "${PWD}:/workspace" -w /workspace voxelcraft-emsdk
           test -s engine/cubiomes.js
           test -s engine/cubiomes.wasm
+          test -s engine/CUBIOMES-LICENSE.txt
       - name: Verify the requested seed with the compiled Cubiomes WASM
         run: node scripts/test-cubiomes-wasm.mjs
       - name: Test modular world-generation infrastructure
@@ -32,3 +44,15 @@ jobs:
           python-version: '3.12'
       - name: Test vanilla worldgen-data extractor
         run: python scripts/test-extract-worldgen.py
+      - name: Publish the generated engine for static-browser use
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f engine/cubiomes.js engine/cubiomes.wasm engine/CUBIOMES-LICENSE.txt
+          if git diff --cached --quiet; then
+            echo "Generated browser engine is already up to date."
+          else
+            git commit -m "Build Cubiomes WASM for static browser runtime [skip ci]"
+            git push origin HEAD:main
+          fi
