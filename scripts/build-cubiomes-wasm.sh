@@ -12,9 +12,13 @@ if ! command -v git >/dev/null 2>&1; then
   echo "ERROR: git es necesario para descargar Cubiomes upstream." >&2
   exit 1
 fi
+# Pin the upstream source snapshot so biome/version enum behavior does not drift.
+CUBIOMES_COMMIT="e61f90580cbdd883214a8054670dacae655e59c0"
 if [ ! -f "$VENDOR/generator.c" ]; then
-  git clone --depth 1 https://github.com/Cubitect/cubiomes.git "$VENDOR"
+  git clone https://github.com/Cubitect/cubiomes.git "$VENDOR"
 fi
+git -C "$VENDOR" fetch --depth 1 origin "$CUBIOMES_COMMIT"
+git -C "$VENDOR" checkout --detach "$CUBIOMES_COMMIT"
 
 cd "$VENDOR"
 DEBUG_FLAGS=()
