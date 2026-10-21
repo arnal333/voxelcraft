@@ -29,6 +29,15 @@ python -m http.server 8000
 
 Abre `http://localhost:8000` en el navegador. **No** abras el HTML mediante `file://`: los módulos ES y Workers necesitan un servidor HTTP. El script descarga Cubiomes desde su repositorio upstream si aún no existe bajo `engine/vendor/cubiomes`.
 
+También hay un entorno reproducible con Docker (usa la etiqueta de Emscripten fijada en `Dockerfile.emscripten`):
+
+```bash
+docker build -f Dockerfile.emscripten -t voxelcraft-emsdk .
+docker run --rm -v "${PWD}:/workspace" -w /workspace voxelcraft-emsdk
+```
+
+En Windows PowerShell, sustituye `"${PWD}:/workspace"` por `"${PWD}:/workspace"` si Docker resuelve correctamente la ruta actual; si no, usa una ruta absoluta como `"C:/ruta/a/voxelcraft:/workspace"`.
+
 Para generar información de depuración de Emscripten/source maps:
 
 ```bash
