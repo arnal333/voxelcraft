@@ -33,6 +33,7 @@ En el estado actual, el flujo está parcialmente conectado: Cubiomes puede dar I
 | `src/core/gameState.js` | Versión objetivo, capacidad de memoria compartida y estado honesto de compatibilidad. |
 | `src/world/chunkScheduler.js` | Cola de generación: deduplicar, descartar solicitudes lejanas y evitar duplicados. |
 | `src/generator/biomeGenerator.js` | API del cliente de biomas, preferencia por Worker, mensajes de error y límite de fallback. |
+| `src/generator/worldGenerator.js` | Coordina las dos etapas sin acoplarlas a Three.js: muestreo de biomas y preparación del plan de bloques. |
 | `src/generator/biomeWorker.js` | Cargar el bridge WASM local, fijar la semilla y generar el mapa de IDs en hilo de trabajo. |
 | `src/generator/terrainGenerator.js` | Enviar columnas al Worker de terreno y resolver/rechazar el trabajo asíncrono. |
 | `src/generator/terrainWorker.js` | Convertir columnas de la vista previa en arrays de posiciones por material. |
@@ -52,7 +53,7 @@ Los workers entregan arrays mediante buffers transferibles. Son una alternativa 
 
 Una implementación fiel todavía necesita:
 
-1. **Datos oficiales y versionados de worldgen.** El conjunto `minecraft-data` citado por el informe aporta datos de protocolo, bloques y otros catálogos, pero el directorio `data/pc/1.21.1` por sí solo no proporciona el pack completo `data/minecraft/worldgen` del servidor Java. Para reproducirlo deben obtenerse/extraerse los JSON de la versión objetivo del JAR o datapack oficial y documentar su procedencia/versionado.
+1. **Datos oficiales y versionados de worldgen.** El directorio `data/pc/1.21.1` de `minecraft-data` no proporciona por sí solo el pack completo `data/minecraft/worldgen` del servidor Java. Ya se añadió `scripts/extract-worldgen-data.py` para extraer esos JSON de un JAR local suministrado por el usuario, validarlos y crear un manifiesto SHA-256; los activos extraídos quedan ignorados por Git. Falta integrar esos JSON al generador y documentar una referencia vanilla para cada prueba.
 2. **Ruido/densidad vanilla.** Implementar el grafo real de density functions para Overworld 1.21.1 (incluyendo entradas de ruido, splines/continents, aquifers y demás dependencias) y evaluar el volumen en coordenadas X/Y/Z. No basta con una función Perlin inventada basada en un ID de bioma.
 3. **Reglas de superficie reales.** Evaluar las reglas versionadas según alturas, estados de superficie, agua, condiciones del bioma y vecinos; no elegir solo por el nombre del bioma.
 4. **Subsuelo y minerales.** Replicar configuraciones de placed/configured features, distribución por altura, aleatoriedad y orden de aplicación.
