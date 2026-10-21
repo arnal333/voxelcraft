@@ -1,0 +1,10 @@
+# Reproducible Cubiomes/WASM toolchain for the VoxelCraft project.
+# The version is pinned so build behavior does not silently drift.
+FROM emscripten/emsdk:3.1.64
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git ca-certificates bash \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+ENTRYPOINT ["bash", "scripts/build-cubiomes-wasm.sh"]
