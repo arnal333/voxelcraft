@@ -60,12 +60,18 @@
       return ids;
     } catch (workerError) {
       if (worker && !workerFailed) stopWorker(workerError);
-      if (root.CubiomesAdapter) {
-        lastMode = 'main-thread-adapter-fallback';
+      const cells = Number(options && options.width) * Number(options && options.height);
+      // Only permit the legacy adapter for a small spawn sample. A 192x192 map
+      // must never silently move tens of thousands of Cubiomes calls onto UI thread.
+      if (root.CubiomesAdapter && Number.isFinite(cells) && cells > 0 && cells <= 4096) {
+        lastMode = 'main-thread-adapter-fallback-small-map';
         return await root.CubiomesAdapter.generateMap(options);
       }
       lastMode = 'preview-only';
-      throw workerError;
+      const reason = cells > 4096
+        ? 'El Worker no está disponible; se evita calcular un mapa grande en el hilo principal.'
+        : 'El Worker local de Cubiomes no está disponible.';
+      throw new Error(reason + ' Motivo: ' + String(workerError && workerError.message || workerError));
     }
   }
   root.VoxelCraftBiomeGenerator = Object.freeze({
