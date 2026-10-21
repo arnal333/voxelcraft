@@ -14,11 +14,19 @@ if ! command -v git >/dev/null 2>&1; then
 fi
 # Pin the upstream source snapshot so biome/version enum behavior does not drift.
 CUBIOMES_COMMIT="e61f90580cbdd883214a8054670dacae655e59c0"
-if [ ! -f "$VENDOR/generator.c" ]; then
-  git clone https://github.com/Cubitect/cubiomes.git "$VENDOR"
+if [ ! -d "$VENDOR/.git" ]; then
+  if [ -e "$VENDOR" ]; then
+    echo "ERROR: $VENDOR existe pero no es un repositorio Git. Muévelo o elimínalo y vuelve a ejecutar." >&2
+    exit 1
+  fi
+  mkdir -p "$VENDOR"
+  git -C "$VENDOR" init
+  git -C "$VENDOR" remote add origin https://github.com/Cubitect/cubiomes.git
+else
+  git -C "$VENDOR" remote set-url origin https://github.com/Cubitect/cubiomes.git
 fi
 git -C "$VENDOR" fetch --depth 1 origin "$CUBIOMES_COMMIT"
-git -C "$VENDOR" checkout --detach "$CUBIOMES_COMMIT"
+git -C "$VENDOR" checkout --force --detach FETCH_HEAD
 
 cd "$VENDOR"
 DEBUG_FLAGS=()
