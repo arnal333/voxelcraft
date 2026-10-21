@@ -117,6 +117,7 @@ test('Cubiomes biome IDs stay explicit and cherry is not fabricated by fallback'
   assert.equal(ids[185], 'CHERRY_GROVE');
   assert.equal(ids[186], 'UNKNOWN_BIOME');
   assert.equal(ids[12], 'SNOWY_PLAINS');
+  assert.equal(ids[11], 'FROZEN_RIVER');
   assert.equal(ids[170], undefined, 'Nether biome must not be mislabeled as an Overworld biome.');
   assert.ok(html.includes('searchIds[row * searchSize + col] !== 185'));
   assert.ok(!html.includes("return 'CHERRY_GROVE';"), 'The approximate fallback must not invent Cherry Grove.');
