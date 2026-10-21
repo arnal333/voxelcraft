@@ -53,7 +53,7 @@ Desde la raíz del repositorio, con Node.js:
 node scripts/test-worldgen.js
 ```
 
-Estas pruebas comprueban sintaxis, cola de chunks, arrays transferibles del worker, controles de vuelo, mapeo de IDs y símbolos del puente. No sustituyen la prueba de navegador ni la comparación bloque por bloque con Java 1.21.1.
+Estas pruebas comprueban sintaxis, cola de chunks, arrays transferibles del worker, controles de vuelo, mapeo de IDs y símbolos del puente. Después de compilar el WASM, ejecuta también `node scripts/test-cubiomes-wasm.mjs`: valida la API WASM real y busca Cherry Grove para la semilla indicada. La suite no sustituye una prueba visual en navegador ni la comparación bloque por bloque del terreno con Java 1.21.1.
 
 El archivo compilado `engine/cubiomes.js` y el correspondiente `engine/cubiomes.wasm` se generan localmente; no se suben en este cambio. Si no están construidos, el juego puede entrar en modo aproximado y avisar de ello.
 
@@ -81,6 +81,6 @@ La arquitectura es ahora modular y las tareas de biomas/plan de bloques se puede
 2. **Altura y forma del terreno:** todavía utilizan el generador simplificado heredado; el worker de terreno solo traslada esas columnas a una estructura eficiente. No calcula aún la densidad vanilla `final_density`.
 3. **Reglas de superficie, subsuelo y minerales:** las reglas completas de Minecraft 1.21.1 no están implementadas.
 4. **Paridad bit-a-bit:** no está validada. Se necesitan datos correctos de la versión y pruebas comparativas contra el mundo Java real en coordenadas conocidas.
-5. **Semilla `5890866665536842607`:** con Cubiomes WASM compilado, el juego busca dentro de `X/Z ±2048` un punto de muestreo cuyo ID sea `185` (Cherry Grove) y arranca cerca del punto más próximo al origen. Esto es un punto de inspección para ver los árboles rosas, no el spawn vanilla oficial. Si Cubiomes no está disponible, no se inventa el bioma y se usa el inicio de vista previa `X=8, Z=8`.
+5. **Semilla `5890866665536842607`:** la CI compiló el WASM real de Cubiomes y confirmó el ID `185` (Cherry Grove) en la muestra `X=-32, Z=96` usando la misma cuadrícula de búsqueda del juego (`X/Z ±2048`, paso de 16). El juego vuelve a buscar al iniciar y usa esa zona como punto de inspección; no es el spawn vanilla oficial. Si el WASM local no está compilado/disponible, se indica que no se pudo confirmar y se usa el inicio de vista previa `X=8, Z=8`.
 
 Se conservó el juego funcional en lugar de reemplazarlo por una demo nueva. Las comprobaciones hechas a los archivos fuente son análisis sintácticos; no equivalen a una prueba visual de ejecución en navegador.
