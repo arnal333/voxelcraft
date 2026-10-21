@@ -28,7 +28,7 @@ function buildSurfacePlan(columns, seaLevel, stoneDepth) {
       const oceanDirt = 0x1a5276;
       for (let y = c.h - 2; y <= c.h; y++) add(oceanDirt, c.x, y, c.z, false, 1);
       for (let y = c.h + 1; y <= seaLevel; y++) {
-        if (c.biomeKey === 'FROZEN_OCEAN' && y === seaLevel) add(ICE.hex, c.x, y, c.z, ICE.transparent, ICE.opacity);
+        if ((c.biomeKey === 'FROZEN_OCEAN' || c.biomeKey === 'FROZEN_RIVER') && y === seaLevel) add(ICE.hex, c.x, y, c.z, ICE.transparent, ICE.opacity);
         else add(WATER.hex, c.x, y, c.z, WATER.transparent, WATER.opacity);
       }
     } else {
