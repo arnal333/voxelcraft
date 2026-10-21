@@ -31,7 +31,7 @@
             throw new Error('El módulo Emscripten no exporta createCubiomesModule.');
           }
           const mod = await factory({
-            locateFile: function (path) { return new URL('../engine/' + path, document.baseURI).href; }
+            locateFile: function (path) { return new URL('./engine/' + path, document.baseURI).href; }
           });
           if (!mod || typeof mod.ccall !== 'function' || !mod.HEAP32) {
             throw new Error('Cubiomes WASM se cargó sin la API puente esperada.');
