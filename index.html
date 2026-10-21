@@ -1117,6 +1117,8 @@ async function renderBiomeMap() {
   const img=biomeMapCtx.createImageData(size,size);
   biomeMapCells=[];
   for(let py=0;py<size;py++) {
+    // Yield during the approximate fallback so opening the map does not lock the UI.
+    if (!ids && py % 8 === 0) await new Promise(resolve => requestAnimationFrame(resolve));
     for(let px=0;px<size;px++) {
       const wx=ox+(px-size/2)*biomeMapStep;
       const wz=oz+(py-size/2)*biomeMapStep;
