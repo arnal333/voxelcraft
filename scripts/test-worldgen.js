@@ -44,12 +44,36 @@ test('all modular JavaScript files parse', () => {
     'src/renderer/voxelMaterials.js',
     'src/world/chunkScheduler.js',
     'src/generator/biomeGenerator.js',
+    'src/generator/worldGenerator.js',
     'src/generator/biomeWorker.js',
     'src/generator/terrainGenerator.js',
     'src/generator/terrainWorker.js',
     'src/controls/flyControls.js'
   ];
   for (const file of files) new Function(read(file)); // eslint-disable-line no-new-func
+});
+
+test('world generator coordinator delegates the two stages', () => {
+  const calls = [];
+  const sandbox = {
+    window: {
+      VoxelCraftCore: { target: { edition: 'Java', version: '1.21.1' }, status: { exact: false } },
+      VoxelCraftBiomeGenerator: { generateMap: async (options) => { calls.push(['biome', options]); return new Int32Array([185]); } },
+      VoxelCraftTerrainGenerator: { buildSurfacePlan: async (columns, options) => { calls.push(['terrain', columns, options]); return { groups: [] }; } }
+    }
+  };
+  vm.runInNewContext(read('src/generator/worldGenerator.js'), sandbox);
+  assert.equal(sandbox.window.VoxelCraftWorldGenerator.target.version, '1.21.1');
+  return Promise.all([
+    sandbox.window.VoxelCraftWorldGenerator.generateBiomeMap({ seed: '1', width: 1, height: 1 }),
+    sandbox.window.VoxelCraftWorldGenerator.buildSurfacePlan([{ x: 0, z: 0, h: 64 }], { seaLevel: 63 })
+  ]).then((results) => {
+    assert.equal(results[0][0], 185);
+    assert.deepEqual(results[1], { groups: [] });
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0][0], 'biome');
+    assert.equal(calls[1][0], 'terrain');
+  });
 });
 
 test('chunk scheduler deduplicates and drops distant work', () => {
