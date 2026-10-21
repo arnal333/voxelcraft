@@ -31,47 +31,48 @@ def is_relevant(path: str) -> bool:
     return path.endswith(".json") and any(path.startswith(prefix) for prefix in PREFIXES)
 
 
-def iter_archives(blob: bytes, label: str, depth: int = 0) -> Iterable[tuple[str, zipfile.ZipFile]]:
+def iter_archives(blob: bytes, label: str, depth: int = 0) -> Iterable[tuple[str, dict[str, bytes]]]:
+    """Yield copied entries so parents can be closed before recursion continues."""
     if depth > MAX_NESTED_DEPTH:
         return
     try:
-        archive = zipfile.ZipFile(io.BytesIO(blob))
+        with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+            relevant: dict[str, bytes] = {}
+            nested_archives: list[tuple[str, bytes]] = []
+            for name in archive.namelist():
+                if is_relevant(name):
+                    relevant[name] = archive.read(name)
+                elif name.lower().endswith(".jar") and depth < MAX_NESTED_DEPTH:
+                    try:
+                        nested_archives.append((name, archive.read(name)))
+                    except (KeyError, RuntimeError, zipfile.BadZipFile):
+                        continue
     except zipfile.BadZipFile:
         return
-    yield label, archive
-    for name in archive.namelist():
-        if not name.lower().endswith(".jar"):
-            continue
-        try:
-            nested = archive.read(name)
-        except (KeyError, RuntimeError, zipfile.BadZipFile):
-            continue
-        yield from iter_archives(nested, f"{label}!/{name}", depth + 1)
 
+    # The archive has been closed safely; the selected bytes remain available.
+    yield label, relevant
+    for name, nested in nested_archives:
+        yield from iter_archives(nested, f"{label}!/{name}", depth + 1)
 
 def extract(source: Path, output: Path) -> dict:
     source_bytes = source.read_bytes()
     extracted: dict[str, str] = {}
     seen: set[str] = set()
-    for archive_label, archive in iter_archives(source_bytes, str(source)):
-        try:
-            names = archive.namelist()
-            for name in names:
-                if name in seen or not is_relevant(name):
-                    continue
-                try:
-                    data = archive.read(name)
-                    # Validate JSON now, rather than letting broken data fail later in the game.
-                    json.loads(data.decode("utf-8"))
-                except (KeyError, UnicodeDecodeError, json.JSONDecodeError, RuntimeError) as exc:
-                    raise RuntimeError(f"Invalid JSON in {archive_label}!/{name}: {exc}") from exc
-                destination = output / name
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                destination.write_bytes(data)
-                extracted[name] = sha256_bytes(data)
-                seen.add(name)
-        finally:
-            archive.close()
+    for archive_label, entries in iter_archives(source_bytes, str(source)):
+        for name, data in entries.items():
+            if name in seen:
+                continue
+            try:
+                # Validate JSON now, rather than letting broken data fail later in the game.
+                json.loads(data.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise RuntimeError(f"Invalid JSON in {archive_label}!/{name}: {exc}") from exc
+            destination = output / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(data)
+            extracted[name] = sha256_bytes(data)
+            seen.add(name)
 
     if not extracted:
         raise RuntimeError(
