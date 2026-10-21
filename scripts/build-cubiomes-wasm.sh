@@ -41,7 +41,7 @@ emcc -O3 -fwrapv -I. \
   finders.c generator.c layers.c biomenoise.c biomes.c noise.c util.c quadbase.c \
   -o "$ROOT/engine/cubiomes.js" \
   -sMODULARIZE=1 -sEXPORT_ES6=1 -sEXPORT_NAME=createCubiomesModule \
-  -sENVIRONMENT=web,worker -sALLOW_MEMORY_GROWTH=1 -sWASM_BIGINT=1 \
+  -sENVIRONMENT=web,worker,node -sALLOW_MEMORY_GROWTH=1 -sWASM_BIGINT=1 \
   -sMALLOC=emmalloc \
   -sEXPORTED_FUNCTIONS='["_worldgen_init","_worldgen_biome_at","_worldgen_generate_map","_worldgen_map_ptr"]' \
   -sEXPORTED_RUNTIME_METHODS='["ccall"]' --no-entry "${DEBUG_FLAGS[@]}"
