@@ -11,6 +11,7 @@ Este repositorio conserva el prototipo jugable Three.js e incorpora la arquitect
 - `src/generator/biomeGenerator.js`: API de alto nivel para calcular biomas, priorizando un Web Worker.
 - `src/generator/biomeWorker.js`: inicializa el puente WASM local dentro de un worker y copia los IDs a un `Int32Array` transferible.
 - `src/generator/terrainGenerator.js`: cliente de worker para construir planes de bloques por chunk.
+- `src/generator/worldGenerator.js`: coordinador de las dos etapas, biomas y preparación de terreno.
 - `src/generator/terrainWorker.js`: calcula arrays de posiciones agrupadas por material fuera del hilo de renderizado.
 - `src/controls/flyControls.js`: estado de vuelo; `F` alterna el vuelo, espacio sube, `Ctrl`/`C` baja y `Shift` acelera.
 - `js/cubiomes-adapter.js`: adaptador de compatibilidad con inicialización asíncrona y errores visibles.
@@ -59,6 +60,18 @@ El archivo compilado `engine/cubiomes.js` y el correspondiente `engine/cubiomes.
 ## Controles
 
 WASD para moverse, mouse para mirar, espacio para saltar (o subir en vuelo), `F` para activar/desactivar vuelo, `Ctrl`/`C` para bajar durante el vuelo, `Shift` para el comportamiento de velocidad, `T` o `/` para abrir comandos, y `Esc` para liberar el mouse. `/tp x y z` y `/teleport x y z` siguen disponibles.
+
+## Preparar los JSON vanilla para desarrollar el generador exacto
+
+El informe propone usar configuraciones versionadas del juego para ruido y reglas de superficie. Como el directorio `data/pc/1.21.1` de `minecraft-data` no contiene por sí solo el paquete de datos completo de worldgen del servidor, el repositorio incluye un extractor que trabaja con un JAR local de Minecraft Java 1.21.1:
+
+```bash
+python scripts/extract-worldgen-data.py "/ruta/al/server.jar"
+```
+
+El script busca los archivos en el JAR y en JAR anidados, copia solo los JSON de `data/minecraft/worldgen/` y `data/minecraft/tags/worldgen/`, valida que sean JSON y crea un manifiesto SHA-256. Los archivos extraídos se guardan en `data/vanilla-1.21.1/`, que está excluido de Git para no incluir activos del juego en el repositorio.
+
+**Importante:** esta extracción prepara una fuente de referencia local; el código actual todavía no interpreta el grafo completo de densidad, las reglas de superficie ni las configuraciones de minerales. No significa que el terreno ya sea vanilla exacto.
 
 ## Estado de fidelidad (importante)
 
