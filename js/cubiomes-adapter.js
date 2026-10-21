@@ -14,16 +14,17 @@
       if (!modulePromise) modulePromise = (async () => {
         // Prefer a locally built bridge if the user compiled it; otherwise use the pinned WASM build.
         try {
-          await new Promise((resolve, reject) => {
-            const s = document.createElement('script');
-            s.src = './engine/cubiomes.js'; s.async = true;
-            s.onload = resolve; s.onerror = () => { s.remove(); reject(new Error('No hay motor local compilado')); };
-            document.head.appendChild(s);
-          });
-          if (typeof window.createCubiomesModule === 'function') {
-            moduleInstance = await window.createCubiomesModule(); mode = 'local-bridge'; API.available = true; return moduleInstance;
+          // The build script emits an ES module; load it through the module API rather than a classic script tag.
+          const localModule = await import('../engine/cubiomes.js');
+          const localFactory = localModule.default || localModule.createCubiomesModule || window.createCubiomesModule;
+          if (typeof localFactory === 'function') {
+            moduleInstance = await localFactory();
+            mode = 'local-bridge';
+            API.available = true;
+            return moduleInstance;
           }
-        } catch (_) { /* try pinned remote engine below */ }
+          throw new Error('El motor local no exporta createCubiomesModule.');
+        } catch (_) { /* try the pinned remote build below */ }
         await new Promise((resolve, reject) => {
           const s = document.createElement('script');
           s.src = CDN_BASE + 'cubiomes.js'; s.async = true;
