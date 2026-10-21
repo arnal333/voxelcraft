@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Minecraft 3D Walk — Optimizado</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#000; overflow:hidden; font-family:'Segoe UI',sans-serif; }
+#c { display:block; width:100vw; height:100vh; }
+#hud {
+  position:fixed; top:0; left:0; right:0; bottom:0;
+  pointer-events:none; z-index:10;
+}
+#crosshair {
+  position:absolute; top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  width:20px; height:20px;
+}
+#crosshair::before, #crosshair::after {
+  content:''; position:absolute; background:rgba(255,255,255,.8);
+}
+#crosshair::before { width:2px; height:100%; left:50%; transform:translateX(-50%); }
+#crosshair::after  { height:2px; width:100%; top:50%; transform:translateY(-50%); }
+#info {
+  position:absolute; top:8px; left:8px;
+  background:rgba(0,0,0,.55); color:#fff;
+  padding:8px 12px; border-radius:6px;
+  font-size:12px; line-height:1.7;
+}
+#engine-status { position:absolute; top:8px; left:50%; transform:translateX(-50%); background:rgba(105,45,0,.88); color:#fff; padding:7px 11px; border-radius:6px; font-size:11px; font-weight:700; text-align:center; max-width:min(90vw,620px); }
+#engine-actions { position:absolute; top:62px; left:8px; pointer-events:auto; display:flex; gap:6px; }
+#engine-actions button { background:rgba(0,0,0,.75); color:#fff; border:1px solid #777; border-radius:5px; padding:6px 8px; font-size:11px; cursor:pointer; }
+#engine-actions button:hover { background:#333; }
+#biome-map-open { background:rgba(0,0,0,.75); color:#fff; border:1px solid #777; border-radius:5px; padding:6px 8px; font-size:11px; cursor:pointer; }
+#biome-map-panel { position:fixed; z-index:40; top:50%; right:18px; transform:translateY(-50%); width:min(360px,calc(100vw - 24px)); background:rgba(14,17,24,.97); color:#fff; border:1px solid #596273; border-radius:10px; padding:12px; box-shadow:0 10px 40px #0009; pointer-events:auto; }
+#biome-map-panel.hidden { display:none !important; }
+#biome-map-panel header { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+#biome-map-panel h3 { font-size:15px; }
+#biome-map-panel button { background:#273244; color:#fff; border:1px solid #657084; border-radius:5px; padding:5px 8px; cursor:pointer; }
+#biome-map-canvas { display:block; width:100%; aspect-ratio:1; image-rendering:pixelated; border:1px solid #667085; background:#10151d; }
+#biome-map-note { color:#ffcf8a; font-size:11px; line-height:1.4; margin:8px 0; }
+#biome-map-readout { color:#d8e0ee; font-size:12px; line-height:1.5; }
+#biome-hud {
+  position:absolute; top:8px; right:8px;
+  background:rgba(0,0,0,.55); color:#fff;
+  padding:8px 12px; border-radius:6px;
+  font-size:13px; font-weight:600;
+}
+#controls-hint {
+  position:absolute; bottom:10px; left:50%;
+  transform:translateX(-50%);
+  background:rgba(0,0,0,.6); color:#ccc;
+  padding:6px 16px; border-radius:20px;
+  font-size:12px; white-space:nowrap;
+}
+#seed-bar {
+  position:absolute; bottom:40px; left:50%;
+  transform:translateX(-50%);
+  display:flex; gap:8px; align-items:center;
+  background:rgba(0,0,0,.7); padding:6px 12px; border-radius:8px;
+  pointer-events:all;
+}
+#seed-bar input {
+  background:#1a1a2e; border:1px solid #444; color:#fff;
+  padding:4px 8px; border-radius:4px; font-size:13px; width:200px;
+}
+#seed-bar button {
+  background:#e94560; border:none; color:#fff;
+  padding:4px 10px; border-radius:4px; cursor:pointer;
+  font-size:12px; font-weight:700;
+}
+#seed-bar button:hover { opacity:.85; }
+#loading {
+  position:fixed; inset:0; background:#1a1a2e;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  color:#fff; z-index:100; gap:16px;
+}
+#loading h2 { font-size:22px; }
+#prog-bar {
+  width:300px; height:8px; background:#333; border-radius:4px; overflow:hidden;
+}
+#prog-fill {
+  height:100%; background:#4caf50; border-radius:4px;
+  transition:width .1s;
+}
+#click-to-play {
+  position:fixed; inset:0; background:rgba(0,0,0,.75);
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  color:#fff; z-index:50; gap:12px; cursor:pointer;
+}
+#click-to-play h2 { font-size:28px; }
+#click-to-play p  { color:#aaa; font-size:14px; }
+#command-bar{position:fixed;left:50%;bottom:22%;transform:translateX(-50%);width:min(620px,92vw);z-index:80;display:flex;gap:8px;background:rgba(0,0,0,.88);border:1px solid #8b8b8b;padding:8px;border-radius:5px;box-shadow:0 5px 25px #0009}
+#command-input{flex:1;min-width:0;background:#111;color:#fff;border:1px solid #555;padding:10px;font:16px Consolas,monospace;outline:none}
+#command-help{position:fixed;left:50%;bottom:calc(22% - 28px);transform:translateX(-50%);z-index:80;color:#ddd;font:12px Consolas,monospace;text-shadow:1px 1px #000;white-space:nowrap}
+.hidden { display:none !important; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="loading">
+  <h2>⛏ Generando mundo...</h2>
+  <div id="prog-bar"><div id="prog-fill" style="width:0%"></div></div>
+  <div id="prog-label" style="color:#aaa;font-size:13px">Iniciando motor...</div>
+</div>
+
+<div id="click-to-play" class="hidden">
+  <h2>⛏ Minecraft 3D Walk</h2>
+  <p>Haz click para capturar el mouse y explorar</p>
+  <p style="font-size:12px;color:#666">WASD · Espacio · Shift · Mouse</p>
+</div>
+
+<div id="hud" class="hidden">
+  <div id="crosshair"></div>
+  <div id="engine-status">MODO PREVIEW: generador aproximado · NO es terreno vanilla Java 1.21.x</div>
+  <div id="engine-actions"><button id="export-reference">Exportar muestras JSON</button><button id="run-self-tests">Pruebas internas</button><button id="biome-map-open">Mapa de biomas</button></div>
+  <div id="info">
+    <div id="fps">FPS: --</div>
+    <div id="pos">XYZ: 0, 0, 0</div>
+    <div id="chunk-info">Chunk: 0, 0</div>
+  </div>
+  <div id="biome-hud">Bioma: --</div>
+  <div id="controls-hint">WASD mover · Espacio saltar · Shift lento · T o / comandos · ESC mouse</div>
+  <div id="seed-bar">
+    <span style="color:#aaa;font-size:12px">Semilla:</span>
+    <input id="seed-in" type="text" value="5890866665536842607">
+    <button onclick="regenWorld()">↺ Regenerar</button>
+  </div>
+</div>
+
+<section id="biome-map-panel" class="hidden" aria-label="Mapa de biomas de vista previa">
+  <header><h3>Mapa de biomas</h3><button id="biome-map-close" type="button">Cerrar ✕</button></header>
+  <canvas id="biome-map-canvas" width="192" height="192" aria-label="Vista previa del mapa de biomas"></canvas>
+  <p id="biome-map-note">Carga Cubiomes para calcular biomas Java 1.21.1. La geometría del terreno 3D aún es aproximada.</p>
+  <div id="biome-map-readout">Pulsa una zona del mapa para ver sus coordenadas estimadas.</div>
+  <div style="display:flex;gap:6px;margin-top:8px"><button id="biome-map-refresh" type="button">Actualizar mapa</button><button id="biome-map-center" type="button">Centrar en jugador</button></div>
+</section>
+<div id="command-bar" class="hidden"><input id="command-input" autocomplete="off" spellcheck="false" placeholder="/tp -508 90 24"><button id="command-run" type="button">Ejecutar</button></div><div id="command-help" class="hidden">Comandos: /tp x y z · /tp @s x y z · Esc cerrar</div>
+
+<script src="./js/cubiomes-adapter.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ─────────────────────────────────────────────
+// JAVA RANDOM
+// ─────────────────────────────────────────────
+class JavaRandom {
+  constructor(seed) {
+    this.seed = (BigInt(seed) ^ 0x5DEECE66Dn) & ((1n<<48n)-1n);
+  }
+  next(bits) {
+    this.seed = (this.seed * 0x5DEECE66Dn + 0xBn) & ((1n<<48n)-1n);
+    return Number(this.seed >> BigInt(48-bits));
+  }
+  nextInt(bound) {
+    if (bound<=0) return 0;
+    const b=BigInt(bound);
+    if((b&(b-1n))===0n) return Number((b*BigInt(this.next(31)))>>31n);
+    let bits,val;
+    do{ bits=this.next(31); val=bits%bound; }while(bits-val+(bound-1)<0);
+    return val;
+  }
+  nextDouble() {
+    return Number(BigInt(this.next(26))*134217728n+BigInt(this.next(27)))/9007199254740992;
+  }
+}
+
+function seedFromString(str) {
+  str = String(str).trim();
+  // Minecraft Java: parse a signed 64-bit decimal seed when possible.
+  // If parsing fails (including signed-64 overflow), use Java String.hashCode().
+  if(/^-?\d+$/.test(str)) {
+    try {
+      const v = BigInt(str);
+      if(v >= -0x8000000000000000n && v <= 0x7FFFFFFFFFFFFFFFn) return v;
+    } catch (_) { /* falls through to String.hashCode */ }
+  }
+  let h = 0;
+  for(let i=0;i<str.length;i++) h = (Math.imul(h,31) + str.charCodeAt(i)) | 0;
+  return BigInt(h);
+}
+
+// ─────────────────────────────────────────────
+// WORLDGEN CONTRACT — objetivo: Java Edition 1.21.x
+// Importante: el generador legado de abajo NO es compatible con vanilla.
+// No se activa un fallback silencioso: hasta conectar y validar un core
+// Java 1.21.x real, el estado se muestra explícitamente como PREVIEW.
+// ─────────────────────────────────────────────
+const WORLDGEN_TARGET = Object.freeze({ edition: 'Java', version: '1.21.1' });
+const WORLDGEN_STATUS = Object.freeze({
+  exact: false,
+  stage: 'preview-legacy',
+  reason: 'BiomeGen/HeightGen son aproximaciones; falta el core vanilla validado.'
+});
+
+// ─────────────────────────────────────────────
+// PERLIN NOISE
+// ─────────────────────────────────────────────
+class Perlin {
+  constructor(rng) {
+    this.p=new Uint8Array(512);
+    const t=new Uint8Array(256);
+    for(let i=0;i<256;i++) t[i]=i;
+    for(let i=255;i>0;i--){ const j=rng.nextInt(i+1); [t[i],t[j]]=[t[j],t[i]]; }
+    for(let i=0;i<256;i++) this.p[i]=this.p[i+256]=t[i];
+    this.xo=rng.nextDouble()*256;
+    this.yo=rng.nextDouble()*256;
+    this.zo=rng.nextDouble()*256;
+  }
+  fade(t){return t*t*t*(t*(t*6-15)+10);}
+  lerp(t,a,b){return a+t*(b-a);}
+  grad(h,x,y,z){h&=15;const u=h<8?x:y,v=h<4?y:(h===12||h===14?x:z);return((h&1)?-u:u)+((h&2)?-v:v);}
+  noise(x,y,z){
+    x+=this.xo;y+=this.yo;z+=this.zo;
+    const X=Math.floor(x)&255,Y=Math.floor(y)&255,Z=Math.floor(z)&255;
+    x-=Math.floor(x);y-=Math.floor(y);z-=Math.floor(z);
+    const u=this.fade(x),v=this.fade(y),w=this.fade(z),p=this.p;
+    const A=p[X]+Y,AA=p[A]+Z,AB=p[A+1]+Z,B=p[X+1]+Y,BA=p[B]+Z,BB=p[B+1]+Z;
+    return this.lerp(w,
+      this.lerp(v,this.lerp(u,this.grad(p[AA],x,y,z),this.grad(p[BA],x-1,y,z)),
+                  this.lerp(u,this.grad(p[AB],x,y-1,z),this.grad(p[BB],x-1,y-1,z))),
+      this.lerp(v,this.lerp(u,this.grad(p[AA+1],x,y,z-1),this.grad(p[BA+1],x-1,y,z-1)),
+                  this.lerp(u,this.grad(p[AB+1],x,y-1,z-1),this.grad(p[BB+1],x-1,y-1,z-1))));
+  }
+  oct(x,z,n,p,s){
+    let v=0,a=1,f=1,m=0;
+    for(let i=0;i<n;i++){v+=this.noise(x*f*s,0,z*f*s)*a;m+=a;a*=p;f*=2;}
+    return v/m;
+  }
+}
+
+// ─────────────────────────────────────────────
+// BIOMAS
+// ─────────────────────────────────────────────
+const BIOME_DEFS = {
+  DEEP_OCEAN:   {name:'Océano Profundo',  grass:0x3d7dbf,dirt:0x1a5276,stone:0x2c3e50,water:true,deep:true},
+  OCEAN:        {name:'Océano',           grass:0x3d7dbf,dirt:0x1a5276,stone:0x2c3e50,water:true},
+  FROZEN_OCEAN: {name:'Océano Helado',    grass:0xb3d9f0,dirt:0x6eb3d4,stone:0x2c3e50,water:true},
+  BEACH:        {name:'Playa',            grass:0xf5e6a3,dirt:0xd4c276,stone:0x9e8a50},
+  RIVER:        {name:'Río',              grass:0x5dade2,dirt:0x2e86c1,stone:0x2c3e50,water:true},
+  PLAINS:       {name:'Llanuras',         grass:0x7dbb6b,dirt:0x8B6343,stone:0x888888},
+  FOREST:       {name:'Bosque',           grass:0x4a7c4e,dirt:0x8B6343,stone:0x888888,trees:'oak'},
+  BIRCH_FOREST: {name:'Bosque Abedul',    grass:0x5e9c5e,dirt:0x8B6343,stone:0x888888,trees:'birch'},
+  DARK_FOREST:  {name:'Bosque Oscuro',    grass:0x2d5a27,dirt:0x8B6343,stone:0x888888,trees:'dark'},
+  JUNGLE:       {name:'Jungla',           grass:0x2d6a4f,dirt:0x8B6343,stone:0x888888,trees:'jungle'},
+  DESERT:       {name:'Desierto',         grass:0xf9e784,dirt:0xd4b04a,stone:0x9e8a50},
+  SAVANNA:      {name:'Sabana',           grass:0xbda133,dirt:0x8B6343,stone:0x888888,trees:'acacia'},
+  TAIGA:        {name:'Taiga',            grass:0x56887d,dirt:0x8B6343,stone:0x888888,trees:'spruce'},
+  SNOWY_TAIGA:  {name:'Taiga Nevada',     grass:0xddeeff,dirt:0xaaccdd,stone:0x888888,snow:true,trees:'spruce'},
+  MOUNTAINS:    {name:'Montañas',         grass:0x888888,dirt:0x777777,stone:0x666666},
+  SNOWY_SLOPES: {name:'Pendientes Nieve', grass:0xeef5ff,dirt:0xc0d8f0,stone:0x888888,snow:true},
+  STONY_PEAKS:  {name:'Picos Pedregosos', grass:0xa0a0a0,dirt:0x888888,stone:0x606060},
+  SWAMP:        {name:'Pantano',          grass:0x4a6629,dirt:0x3b3b1e,stone:0x888888,trees:'oak'},
+  MEADOW:       {name:'Pradera',          grass:0x79c24b,dirt:0x8B6343,stone:0x888888},
+  CHERRY_GROVE: {name:'Bosque Cerezo 🌸', grass:0xc8f0c8,dirt:0x8B6343,stone:0x888888,trees:'cherry'},
+  MUSHROOM:     {name:'Champiñón',        grass:0x8b5da8,dirt:0x6b3d7d,stone:0x888888},
+};
+
+// Cubiomes biome cache. The 3D block terrain remains an approximation, but
+// biome choice can use real Java 1.21.1 biome samples when WASM is available.
+let exactBiomeCache = new Map();
+function exactBiomeKeyAt(wx,wz) {
+  const sx=Math.round(wx/4)*4, sz=Math.round(wz/4)*4;
+  const id=exactBiomeCache.get(`${sx}|${sz}`);
+  return id===undefined ? null : cubiomesKey(id);
+}
+function clearExactBiomeCache() { exactBiomeCache = new Map(); }
+
+class BiomeGen {
+  constructor(seed) {
+    this.nT = new Perlin(new JavaRandom(seed ^ 0x1234567890ABCDEFn));
+    this.nH = new Perlin(new JavaRandom(seed ^ 0xFEDCBA0987654321n));
+    this.nC = new Perlin(new JavaRandom(seed ^ 0xABCDEF1234567890n));
+    this.nE = new Perlin(new JavaRandom(seed ^ 0x0F0F0F0F0F0F0F0Fn));
+    this.nW = new Perlin(new JavaRandom(seed ^ 0xA1B2C3D4E5F60718n));
+  }
+  get(wx,wz) {
+    const exact=exactBiomeKeyAt(wx,wz);
+    if(exact) return exact;
+    const s=0.003;
+    const T=this.nT.oct(wx,wz,4,.5,s);
+    const H=this.nH.oct(wx,wz,4,.5,s*.8);
+    const C=this.nC.oct(wx,wz,4,.5,s*.6);
+    const E=this.nE.oct(wx,wz,3,.5,s*1.2);
+    const W=this.nW.oct(wx,wz,2,.5,s*2);
+
+    if(C<-0.45) return 'DEEP_OCEAN';
+    if(C<-0.19) return H>0.1?'FROZEN_OCEAN':'OCEAN';
+    if(C<-0.11) return T>0.1?'BEACH':'OCEAN';
+    if(E>0.65&&Math.abs(W)<0.12) return 'RIVER';
+    if(C>0.55){
+      if(T<-0.3) return 'SNOWY_SLOPES';
+      if(E<-0.3) return 'STONY_PEAKS';
+      return 'MOUNTAINS';
+    }
+    if(T>-0.1&&T<0.35&&H>0.1&&H<0.5&&W<-0.25&&C>0.0) return 'CHERRY_GROVE';
+    if(T<-0.45) return H<0?'SNOWY_TAIGA':'SNOWY_SLOPES';
+    if(T<-0.15) return 'TAIGA';
+    if(T<0.2){
+      if(H<-0.35) return 'PLAINS';
+      if(H<-0.1)  return 'MEADOW';
+      if(H<0.1)   return 'FOREST';
+      if(H<0.3)   return 'BIRCH_FOREST';
+      if(H<0.5)   return 'DARK_FOREST';
+      return 'SWAMP';
+    }
+    if(T<0.55){
+      if(H<-0.35) return 'SAVANNA';
+      if(H<0.0)   return 'PLAINS';
+      if(H<0.45)  return 'FOREST';
+      return 'JUNGLE';
+    }
+    if(H<-0.35) return 'DESERT';
+    if(H<0.0)   return 'SAVANNA';
+    if(H<0.3)   return 'PLAINS';
+    return 'JUNGLE';
+  }
+}
+
+class HeightGen {
+  constructor(seed) {
+    this.n1=new Perlin(new JavaRandom(seed^0x1111111111111111n));
+    this.n2=new Perlin(new JavaRandom(seed^0x2222222222222222n));
+    this.n3=new Perlin(new JavaRandom(seed^0x3333333333333333n));
+  }
+  get(wx,wz,biome) {
+    const b=this.n1.oct(wx,wz,6,.5,.004);
+    const d=this.n2.oct(wx,wz,4,.5,.02);
+    const r=this.n3.oct(wx,wz,2,.5,.1);
+    let h;
+    switch(biome){
+      case'DEEP_OCEAN':   h=48+b*6; break;
+      case'OCEAN': case'FROZEN_OCEAN': h=54+b*8; break;
+      case'RIVER':        h=61+b*3; break;
+      case'BEACH':        h=63+b*2; break;
+      case'MOUNTAINS':    h=80+b*45+d*12+r*4; break;
+      case'SNOWY_SLOPES': h=88+b*38+d*8; break;
+      case'STONY_PEAKS':  h=100+b*55+d*15; break;
+      case'DESERT':       h=66+b*7+d*3; break;
+      case'SWAMP':        h=62+b*4; break;
+      case'JUNGLE':       h=68+b*14+d*5; break;
+      case'CHERRY_GROVE': h=70+b*12+d*4; break;
+      case'DARK_FOREST':  h=67+b*10+d*4; break;
+      default:            h=65+b*12+d*4;
+    }
+    return Math.max(40,Math.min(140,Math.round(h)));
+  }
+}
+
+// ─────────────────────────────────────────────
+// THREE.JS ENGINE
+// ─────────────────────────────────────────────
+const SEA_LEVEL = 63;
+const CHUNK_SIZE = 16;
+const RENDER_CHUNKS = 6; // reducido de 10 → 6 para evitar freeze en seeds de montaña
+
+let scene, camera, renderer, clock;
+let biomeGen, heightGen;
+let chunkMeshes = new Map();
+let playerVel = new THREE.Vector3();
+let onGround = false;
+let keys = {};
+let yaw = 0, pitch = 0;
+let currentSeed = 0n;
+let worldData = {}; // cache de altura por bloque
+let frameCount = 0, lastFPSTime = 0, lastChunkUpdate = 0;
+const chunkBuildQueue = [];
+const queuedChunkKeys = new Set();
+const MAX_CHUNKS_PER_FRAME = 1;
+let chunkQueueGeneration = 0;
+
+function hexToColor(hex) { return new THREE.Color(hex); }
+
+// Caché global de materiales — evita crear miles de objetos idénticos
+const _matCache = new Map();
+function makePixelTexture(hex) {
+  // Textura procedural pixel-art 16x16: variación sutil por bloque sin archivos externos.
+  const canvas=document.createElement('canvas'); canvas.width=canvas.height=16;
+  const ctx=canvas.getContext('2d');
+  let seed=(hex>>>0)^0x6d2b79f5;
+  const rand=()=>{ seed=(Math.imul(seed^(seed>>>15),1|seed)); seed^=seed+Math.imul(seed^(seed>>>7),61|seed); return ((seed^(seed>>>14))>>>0)/4294967296; };
+  for(let y=0;y<16;y++) for(let x=0;x<16;x++) {
+    let v=Math.floor(174+rand()*82);
+    if((x+y)%7===0) v=Math.max(145,v-25);
+    if(rand()>.94) v=255;
+    ctx.fillStyle=`rgb(${v},${v},${v})`; ctx.fillRect(x,y,1,1);
+  }
+  const tex=new THREE.CanvasTexture(canvas); tex.magFilter=THREE.NearestFilter; tex.minFilter=THREE.NearestMipmapNearestFilter; tex.generateMipmaps=true; tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.needsUpdate=true; return tex;
+}
+function makeMat(hex, opts={}) {
+  const key = `${hex}_${opts.transparent||0}_${opts.opacity||1}`;
+  if (_matCache.has(key)) return _matCache.get(key);
+  const transparent=opts.transparent||false;
+  const mat = new THREE.MeshLambertMaterial({
+    color: hexToColor(hex),
+    map: transparent ? null : makePixelTexture(hex),
+    transparent, opacity:opts.opacity||1,
+  });
+  _matCache.set(key, mat);
+  return mat;
+}
+
+// Materiales
+const MATS = {
+  stone:      makeMat(0x888888),
+  stone_dark: makeMat(0x606060),
+  bedrock:    makeMat(0x333333),
+  water:      makeMat(0x2e86c1,{transparent:true,opacity:0.75}),
+  ice:        makeMat(0xb3d9f0,{transparent:true,opacity:0.85}),
+  sand:       makeMat(0xf5e6a3),
+  gravel:     makeMat(0x9e9e9e),
+  snow:       makeMat(0xeef5ff),
+  // Troncos y hojas se crean por bioma
+};
+
+function getBlockMat(type,biomeKey) {
+  const b = BIOME_DEFS[biomeKey]||BIOME_DEFS.PLAINS;
+  switch(type) {
+    case'grass':    return makeMat(b.grass);
+    case'dirt':     return makeMat(b.dirt||0x8B6343);
+    case'stone':    return makeMat(b.stone||0x888888);
+    case'sand':     return MATS.sand;
+    case'water':    return MATS.water;
+    case'ice':      return MATS.ice;
+    case'snow':     return MATS.snow;
+    case'gravel':   return MATS.gravel;
+    case'bedrock':  return MATS.bedrock;
+    default:        return makeMat(0x888888);
+  }
+}
+
+// Árbol factory — usa InstancedMesh para tronco y copa
+function makeTree(type, x, y, z, group) {
+  let trunkColor, leafColor, trunkH, leafR, leafH;
+  switch(type) {
+    case'oak':    trunkColor=0x8B5E3C;leafColor=0x4a7c4e;trunkH=5;leafR=2;leafH=3; break;
+    case'birch':  trunkColor=0xd6d6c2;leafColor=0x5e9c5e;trunkH=7;leafR=2;leafH=3; break;
+    case'dark':   trunkColor=0x5C4827;leafColor=0x1a4a1a;trunkH=6;leafR=3;leafH=4; break;
+    case'jungle': trunkColor=0x8B5E3C;leafColor=0x1b5e20;trunkH=10;leafR=3;leafH=4; break;
+    case'spruce': trunkColor=0x5C4827;leafColor=0x2e5e54;trunkH=8;leafR=1;leafH=6; break;
+    case'cherry': trunkColor=0x5C4827;leafColor=0xf9a8d4;trunkH=5;leafR=3;leafH=3; break;
+    case'acacia': trunkColor=0x8B5E3C;leafColor=0x7d9a3a;trunkH=5;leafR=3;leafH=2; break;
+    default:      trunkColor=0x8B5E3C;leafColor=0x4a7c4e;trunkH=5;leafR=2;leafH=3;
+  }
+
+  const mTrunk = makeMat(trunkColor);
+  const mLeaf  = makeMat(leafColor,{transparent:true,opacity:.95});
+
+  // Recolectar posiciones de tronco
+  const trunkPos = [];
+  for(let i=0;i<trunkH;i++) trunkPos.push(x+.5, y+i+.5, z+.5);
+
+  // Recolectar posiciones de copa
+  const leafPos = [];
+  if(type==='spruce') {
+    for(let ly=0;ly<leafH;ly++) {
+      const r=Math.max(1,leafH-ly-1);
+      for(let dx=-r;dx<=r;dx++) for(let dz=-r;dz<=r;dz++) {
+        if(Math.abs(dx)+Math.abs(dz)>r+0.5) continue;
+        leafPos.push(x+dx+.5, y+trunkH-1+ly+.5, z+dz+.5);
+      }
+    }
+  } else {
+    for(let dy=0;dy<leafH;dy++) for(let dx=-leafR;dx<=leafR;dx++) for(let dz=-leafR;dz<=leafR;dz++) {
+      if(dx*dx+dz*dz>leafR*leafR+1&&dy===0) continue;
+      if(Math.abs(dx)+Math.abs(dz)+Math.abs(dy)>leafR+leafH/2) continue;
+      leafPos.push(x+dx+.5, y+trunkH-1+dy+.5, z+dz+.5);
+    }
+  }
+
+  // Construir InstancedMesh de tronco
+  if(trunkPos.length > 0) {
+    const tc = trunkPos.length/3;
+    const ti = new THREE.InstancedMesh(_sharedGeoCube, mTrunk, tc);
+    for(let i=0;i<tc;i++){
+      _dummy.position.set(trunkPos[i*3],trunkPos[i*3+1],trunkPos[i*3+2]);
+      _dummy.updateMatrix(); ti.setMatrixAt(i,_dummy.matrix);
+    }
+    ti.instanceMatrix.needsUpdate=true; group.add(ti);
+  }
+  // Construir InstancedMesh de hojas
+  if(leafPos.length > 0) {
+    const lc = leafPos.length/3;
+    const li = new THREE.InstancedMesh(_sharedGeoCube, mLeaf, lc);
+    for(let i=0;i<lc;i++){
+      _dummy.position.set(leafPos[i*3],leafPos[i*3+1],leafPos[i*3+2]);
+      _dummy.updateMatrix(); li.setMatrixAt(i,_dummy.matrix);
+    }
+    li.instanceMatrix.needsUpdate=true; group.add(li);
+  }
+}
+
+// Cache de altura en el mundo — con flush simple para evitar memory leak infinito
+const MAX_WORLD_CACHE = 80000;
+let worldDataSize = 0;
+function getWorldHeight(wx,wz) {
+  const key=`${wx}|${wz}`;
+  if(worldData[key]!==undefined) return worldData[key];
+  if(worldDataSize >= MAX_WORLD_CACHE) { worldData={}; worldDataSize=0; } // flush simple
+  const bk=biomeGen.get(wx,wz);
+  const h=heightGen.get(wx,wz,bk);
+  worldData[key]={h,bk};
+  worldDataSize++;
+  return worldData[key];
+}
+
+// Geometría compartida para todos los chunks
+const _sharedGeoCube = new THREE.BoxGeometry(1,1,1);
+const _dummy = new THREE.Object3D();
+
+// Calcular límite máximo de bloques por tipo para pre-alocar InstancedMesh
+// CHUNK_SIZE*CHUNK_SIZE columnas, capas visibles controladas
+const MAX_COL = CHUNK_SIZE * CHUNK_SIZE; // 256 columnas
+const VISIBLE_STONE_DEPTH = 6; // solo las últimas N capas de piedra visibles
+const MAX_STONE   = MAX_COL * VISIBLE_STONE_DEPTH;  // 1536
+const MAX_SURFACE = MAX_COL * 4;                    // grass/dirt/sand/snow
+const MAX_WATER   = MAX_COL * 10;                   // agua superficial
+const MAX_BEDROCK = MAX_COL;                        // 256
+
+function buildChunk(cx,cz) {
+  const key=`${cx}|${cz}`;
+  if(chunkMeshes.has(key)) return;
+
+  const group = new THREE.Group();
+  const rng = new JavaRandom(currentSeed ^ BigInt(cx*0x9e3779b9+cz*0x6c62272e));
+
+  // Mapa de altura del chunk
+  const heights = [];
+  const biomes  = [];
+  for(let lx=0;lx<CHUNK_SIZE;lx++) {
+    for(let lz=0;lz<CHUNK_SIZE;lz++) {
+      const wx=cx*CHUNK_SIZE+lx, wz=cz*CHUNK_SIZE+lz;
+      const {h,bk}=getWorldHeight(wx,wz);
+      heights.push(h); biomes.push(bk);
+    }
+  }
+
+  const idx=(lx,lz)=>lx*CHUNK_SIZE+lz;
+
+  // ── Acumuladores para InstancedMesh por material ──────────────────
+  // Clave: color hex → {mat, matrices[]}
+  const instMap = new Map();
+
+  function addBlock(wx, y, wz, mat) {
+    const id = mat.uuid;
+    if (!instMap.has(id)) instMap.set(id, {mat, positions:[]});
+    instMap.get(id).positions.push(wx+.5, y+.5, wz+.5);
+  }
+
+  for(let lx=0;lx<CHUNK_SIZE;lx++) {
+    for(let lz=0;lz<CHUNK_SIZE;lz++) {
+      const wx=cx*CHUNK_SIZE+lx, wz=cz*CHUNK_SIZE+lz;
+      const h=heights[idx(lx,lz)];
+      const bk=biomes[idx(lx,lz)];
+      const bd=BIOME_DEFS[bk];
+      const isWater=bd.water;
+
+      // Bedrock — solo 1 bloque
+      addBlock(wx, 0, wz, MATS.bedrock);
+
+      // Stone — solo las últimas VISIBLE_STONE_DEPTH capas (no toda la columna)
+      const stoneTop = h-3;
+      const stoneBot = Math.max(1, stoneTop - VISIBLE_STONE_DEPTH);
+      const stoneMat = makeMat(bd.stone||0x888888);
+      for(let y=stoneBot; y<=stoneTop; y++) {
+        addBlock(wx, y, wz, stoneMat);
+      }
+
+      if(isWater) {
+        // Suelo marino (3 capas de dirt/mud)
+        const dirtMat = makeMat(0x1a5276);
+        for(let y=h-2;y<=h;y++) addBlock(wx, y, wz, dirtMat);
+        // Agua hasta SEA_LEVEL
+        for(let y=h+1;y<=SEA_LEVEL;y++) {
+          const mat=bk==='FROZEN_OCEAN'&&y===SEA_LEVEL?MATS.ice:MATS.water;
+          addBlock(wx, y, wz, mat);
+        }
+      } else {
+        // Dirt 2 capas
+        const dirtMat = makeMat(bd.dirt||0x8B6343);
+        for(let y=h-2;y<h;y++) addBlock(wx, y, wz, dirtMat);
+
+        // Superficie
+        if(bk==='DESERT'||bk==='BEACH') {
+          addBlock(wx, h-1, wz, MATS.sand);
+          addBlock(wx, h,   wz, MATS.sand);
+        } else if(bd.snow) {
+          addBlock(wx, h,   wz, makeMat(bd.grass));
+          addBlock(wx, h+1, wz, MATS.snow);
+        } else {
+          addBlock(wx, h, wz, makeMat(bd.grass));
+        }
+      }
+    }
+  }
+
+  // ── Convertir acumuladores en InstancedMesh ───────────────────────
+  for(const [, {mat, positions}] of instMap) {
+    const count = positions.length / 3;
+    if(count === 0) continue;
+    const instMesh = new THREE.InstancedMesh(_sharedGeoCube, mat, count);
+    instMesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+    for(let i=0; i<count; i++) {
+      _dummy.position.set(positions[i*3], positions[i*3+1], positions[i*3+2]);
+      _dummy.updateMatrix();
+      instMesh.setMatrixAt(i, _dummy.matrix);
+    }
+    instMesh.instanceMatrix.needsUpdate = true;
+    group.add(instMesh);
+  }
+
+  // Árboles de preview: decidir tipo según el bioma de la coordenada exacta,
+  // no según el centro del chunk (evita extender un tipo por fronteras de bioma).
+  if(biomes.some(b => BIOME_DEFS[b]?.trees)) {
+    // Recorre una cuadrícula estable para no dejar un bosque de cerezo vacío
+    // simplemente porque el RNG eligió coordenadas fuera del bioma.
+    for(let lx=2;lx<CHUNK_SIZE-1;lx+=3) for(let lz=2;lz<CHUNK_SIZE-1;lz+=3) {
+      const wx=cx*CHUNK_SIZE+lx, wz=cz*CHUNK_SIZE+lz;
+      const {h,bk}=getWorldHeight(wx,wz);
+      const treeType=BIOME_DEFS[bk]?.trees;
+      if(!treeType || BIOME_DEFS[bk]?.water || h<62) continue;
+      const roll=((Math.imul(wx+0x45d9f3,0x27d4eb2d)^Math.imul(wz-0x119de1f3,0x165667b1))>>>0)%100;
+      const chance=treeType==='cherry'?48:treeType==='dark'?22:30;
+      if(roll<chance) makeTree(treeType,wx,h+1,wz,group);
+    }
+  }
+
+  scene.add(group);
+  chunkMeshes.set(key,group);
+}
+
+function removeChunk(cx,cz) {
+  const key=`${cx}|${cz}`;
+  const g=chunkMeshes.get(key);
+  if(!g) return;
+  scene.remove(g);
+  // No llamamos geometry.dispose() — _sharedGeoCube es compartida
+  // No llamamos material.dispose() — materiales cacheados en _matCache
+  g.traverse(o=>{ if(o.isInstancedMesh) o.dispose(); });
+  chunkMeshes.delete(key);
+}
+
+function updateChunks() {
+  const px=Math.floor(camera.position.x/CHUNK_SIZE);
+  const pz=Math.floor(camera.position.z/CHUNK_SIZE);
+  const needed=new Set();
+
+  for(let dx=-RENDER_CHUNKS;dx<=RENDER_CHUNKS;dx++) {
+    for(let dz=-RENDER_CHUNKS;dz<=RENDER_CHUNKS;dz++) {
+      if(dx*dx+dz*dz>RENDER_CHUNKS*RENDER_CHUNKS) continue;
+      const cx=px+dx,cz=pz+dz,key=`${cx}|${cz}`;
+      needed.add(key);
+      if(!chunkMeshes.has(key) && !queuedChunkKeys.has(key)) {
+        chunkBuildQueue.push({cx,cz,key});
+        queuedChunkKeys.add(key);
+      }
+    }
+  }
+  // Descarta solicitudes que ya quedaron lejos; evita que la cola crezca al correr.
+  for(let i=chunkBuildQueue.length-1;i>=0;i--) {
+    if(!needed.has(chunkBuildQueue[i].key)) {
+      queuedChunkKeys.delete(chunkBuildQueue[i].key);
+      chunkBuildQueue.splice(i,1);
+    }
+  }
+  for(const [k] of chunkMeshes) {
+    if(!needed.has(k)) removeChunk(...k.split('|').map(Number));
+  }
+}
+
+function processChunkQueue() {
+  let built=0;
+  while(chunkBuildQueue.length && built<MAX_CHUNKS_PER_FRAME) {
+    const item=chunkBuildQueue.shift();
+    queuedChunkKeys.delete(item.key);
+    if(!chunkMeshes.has(item.key)) buildChunk(item.cx,item.cz);
+    built++;
+  }
+}
+
+// ─────────────────────────────────────────────
+// FÍSICA SIMPLE
+// ─────────────────────────────────────────────
+function getGroundHeight(x,z) {
+  const wx=Math.floor(x),wz=Math.floor(z);
+  const {h,bk}=getWorldHeight(wx,wz);
+  const bd=BIOME_DEFS[bk];
+  let surfH=h+1;
+  if(bd?.water) surfH=SEA_LEVEL+1;
+  if(bd?.snow)  surfH=h+2;
+  return surfH;
+}
+
+function updatePlayer(dt) {
+  const speed=8, jumpV=8, gravity=20;
+  const dir=new THREE.Vector3();
+  const front=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
+  const right=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
+
+  if(keys['KeyW']||keys['ArrowUp'])    dir.add(front);
+  if(keys['KeyS']||keys['ArrowDown'])  dir.sub(front);
+  if(keys['KeyA']||keys['ArrowLeft'])  dir.sub(right);
+  if(keys['KeyD']||keys['ArrowRight']) dir.add(right);
+  if(dir.lengthSq()>0) dir.normalize().multiplyScalar(speed);
+
+  const shift=keys['ShiftLeft']||keys['ShiftRight'];
+  dir.multiplyScalar(shift?0.4:1);
+
+  camera.position.x+=dir.x*dt;
+  camera.position.z+=dir.z*dt;
+
+  playerVel.y-=gravity*dt;
+  camera.position.y+=playerVel.y*dt;
+
+  const ground=getGroundHeight(camera.position.x,camera.position.z)+1.7;
+  if(camera.position.y<ground) {
+    camera.position.y=ground;
+    playerVel.y=0;
+    onGround=true;
+  } else onGround=false;
+
+  if((keys['Space'])&&onGround) { playerVel.y=jumpV; onGround=false; }
+}
+
+// ─────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────
+function initThree() {
+  scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x87ceeb);
+  scene.fog=new THREE.Fog(0x87ceeb,80,200);
+
+  camera=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,.1,400);
+
+  renderer=new THREE.WebGLRenderer({canvas:document.getElementById('c'),antialias:false});
+  renderer.setSize(innerWidth,innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
+
+  // Luces
+  scene.add(new THREE.AmbientLight(0xffffff,.6));
+  const sun=new THREE.DirectionalLight(0xfff8e0,1.0);
+  sun.position.set(100,200,50);
+  scene.add(sun);
+
+  clock=new THREE.Clock();
+  window.addEventListener('resize',()=>{
+    camera.aspect=innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth,innerHeight);
+  });
+}
+
+async function buildInitialWorld(seed, onProg) {
+  worldData={}; worldDataSize=0;
+  chunkBuildQueue.length=0; queuedChunkKeys.clear();
+  currentSeed=seed;
+  biomeGen=new BiomeGen(seed);
+  heightGen=new HeightGen(seed);
+  clearExactBiomeCache();
+
+  // The reference link supplied for this seed was centered at X=-508, Z=24.
+  // Start there for this test seed so the user can inspect the cherry-grove area.
+  const referenceSeed = 5890866665536842607n;
+  const startX = seed === referenceSeed ? -508 : 8;
+  const startZ = seed === referenceSeed ? 24 : 8;
+  const baseChunkX=Math.floor(startX/CHUNK_SIZE), baseChunkZ=Math.floor(startZ/CHUNK_SIZE);
+
+  // Load real Java biome data and cache a 4-block grid around the spawn region.
+  // This does NOT make block heights/terrain fully vanilla; those are still approximate.
+  if(window.CubiomesAdapter) {
+    try {
+      document.getElementById('prog-label').textContent='Cargando Cubiomes Java 1.21.1...';
+      const radius=(RENDER_CHUNKS+1)*CHUNK_SIZE;
+      const topX=Math.floor((startX-radius)/4)*4, topZ=Math.floor((startZ-radius)/4)*4;
+      const n=Math.ceil((radius*2)/4)+1;
+      const ids=await window.CubiomesAdapter.generateMap({x:topX,z:topZ,width:n,height:n,step:4,y:80,seed:seed.toString()});
+      for(let rz=0;rz<n;rz++) for(let rx=0;rx<n;rx++) exactBiomeCache.set(`${topX+rx*4}|${topZ+rz*4}`,ids[rz*n+rx]);
+      document.getElementById('prog-label').textContent='Biomas Cubiomes cargados; preparando terreno aproximado y árboles por bioma...';
+    } catch(err) {
+      console.warn('[Cubiomes] No se pudo cargar el motor real:',err);
+      document.getElementById('prog-label').textContent='AVISO: motor Cubiomes no disponible; el terreno será una aproximación.';
+    }
+  }
+
+  // Limpiar chunks viejos
+  for(const [k] of chunkMeshes) removeChunk(...k.split('|').map(Number));
+  chunkMeshes.clear();
+
+  const spawn=getWorldHeight(startX,startZ);
+  const spawnY=BIOME_DEFS[spawn.bk]?.water?SEA_LEVEL+3:spawn.h+3;
+  camera.position.set(startX,spawnY,startZ);
+
+  // Pre-generar chunks alrededor de la posición inicial real.
+  let done=0;
+  const total=(RENDER_CHUNKS*2+1)**2;
+  for(let dx=-RENDER_CHUNKS;dx<=RENDER_CHUNKS;dx++) {
+    for(let dz=-RENDER_CHUNKS;dz<=RENDER_CHUNKS;dz++) {
+      if(dx*dx+dz*dz<=RENDER_CHUNKS*RENDER_CHUNKS) {
+        buildChunk(baseChunkX+dx,baseChunkZ+dz);
+        done++;
+        onProg(done/total*100);
+        if(done%2===0) await new Promise(r=>requestAnimationFrame(r));
+      }
+    }
+  }
+}
+
+function loop() {
+  requestAnimationFrame(loop);
+  const dt=Math.min(clock.getDelta(),.05);
+
+  updatePlayer(dt);
+
+  // Chunks dinámicos — throttle a 400ms para no correr cada frame
+  const nowMs = performance.now();
+  if(nowMs - lastChunkUpdate > 400) {
+    updateChunks();
+    lastChunkUpdate = nowMs;
+  }
+
+  processChunkQueue();
+  renderer.render(scene,camera);
+
+  // HUD
+  frameCount++;
+  const now=performance.now();
+  if(now-lastFPSTime>500) {
+    document.getElementById('fps').textContent=`FPS: ${Math.round(frameCount/((now-lastFPSTime)/1000))}`;
+    frameCount=0; lastFPSTime=now;
+  }
+  const p=camera.position;
+  document.getElementById('pos').textContent=`XYZ: ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}`;
+  const cx=Math.floor(p.x/CHUNK_SIZE),cz=Math.floor(p.z/CHUNK_SIZE);
+  document.getElementById('chunk-info').textContent=`Chunk: ${cx}, ${cz}`;
+
+  const {h,bk}=getWorldHeight(Math.floor(p.x),Math.floor(p.z));
+  document.getElementById('biome-hud').textContent=`🌍 ${(BIOME_DEFS[bk]||{}).name||bk}`;
+}
+
+// Pointer lock
+function setupInput() {
+  const ctp=document.getElementById('click-to-play');
+  ctp.addEventListener('click',()=>{
+    document.getElementById('c').requestPointerLock();
+  });
+  document.addEventListener('pointerlockchange',()=>{
+    if(document.pointerLockElement===document.getElementById('c')) {
+      ctp.classList.add('hidden');
+      document.getElementById('hud').classList.remove('hidden');
+    } else {
+      ctp.classList.remove('hidden');
+    }
+  });
+  document.addEventListener('mousemove',e=>{
+    if(document.pointerLockElement!==document.getElementById('c')) return;
+    yaw   -=e.movementX*.002;
+    pitch -=e.movementY*.002;
+    pitch=Math.max(-Math.PI/2+.05,Math.min(Math.PI/2-.05,pitch));
+    camera.rotation.order='YXZ';
+    camera.rotation.y=yaw;
+    camera.rotation.x=pitch;
+  });
+  document.addEventListener('keydown',e=>{
+    if(e.target && (e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA')) return;
+    if((e.key==='/' || e.code==='KeyT') && commandBar.classList.contains('hidden')) { e.preventDefault(); openCommand(); return; }
+    if(!commandBar.classList.contains('hidden')) return;
+    keys[e.code]=true;
+    if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+  });
+  document.addEventListener('keyup',e=>{ keys[e.code]=false; });
+}
+
+async function regenWorld() {
+  const seedStr=document.getElementById('seed-in').value;
+  const seed=seedFromString(seedStr);
+  document.getElementById('loading').style.display='flex';
+  document.getElementById('hud').classList.add('hidden');
+  biomeMapPanel.classList.add('hidden');
+  await new Promise(r=>setTimeout(r,30));
+  await buildInitialWorld(seed, p=>{
+    document.getElementById('prog-fill').style.width=p+'%';
+    document.getElementById('prog-label').textContent=`Generando chunks... ${Math.round(p)}%`;
+  });
+  document.getElementById('loading').style.display='none';
+  document.getElementById('click-to-play').classList.remove('hidden');
+}
+
+// Biome map uses Cubiomes WASM when it loads; block-level terrain remains approximate.
+const biomeMapPanel = document.getElementById('biome-map-panel');
+const biomeMapCanvas = document.getElementById('biome-map-canvas');
+const biomeMapCtx = biomeMapCanvas.getContext('2d', { alpha:false });
+let biomeMapOrigin = { x:0, z:0 };
+let biomeMapStep = 32;
+let biomeMapCells = [];
+let biomeMapUsingCubiomes = false;
+const CUBIOMES_BIOME_KEYS = {0:'OCEAN',1:'PLAINS',2:'DESERT',3:'MOUNTAINS',4:'FOREST',5:'TAIGA',6:'SWAMP',7:'RIVER',10:'FROZEN_OCEAN',11:'RIVER',12:'SNOWY_SLOPES',13:'SNOWY_SLOPES',14:'MUSHROOM',15:'MUSHROOM',16:'BEACH',17:'DESERT',18:'FOREST',19:'TAIGA',20:'MOUNTAINS',21:'JUNGLE',22:'JUNGLE',23:'JUNGLE',24:'DEEP_OCEAN',25:'STONY_PEAKS',26:'BEACH',27:'BIRCH_FOREST',28:'BIRCH_FOREST',29:'DARK_FOREST',30:'SNOWY_TAIGA',31:'SNOWY_TAIGA',32:'TAIGA',33:'TAIGA',34:'MOUNTAINS',35:'SAVANNA',36:'SAVANNA',37:'BADLANDS',38:'BADLANDS',39:'BADLANDS',44:'OCEAN',45:'OCEAN',46:'OCEAN',47:'DEEP_OCEAN',48:'DEEP_OCEAN',49:'DEEP_OCEAN',50:'FROZEN_OCEAN',52:'FOREST',53:'PLAINS',168:'JUNGLE',170:'DESERT',171:'DARK_FOREST',172:'DARK_FOREST',173:'STONY_PEAKS',174:'MOUNTAINS',175:'FOREST',177:'MEADOW',178:'TAIGA',179:'SNOWY_SLOPES',180:'MOUNTAINS',181:'SNOWY_SLOPES',182:'STONY_PEAKS',183:'DARK_FOREST',184:'SWAMP',185:'CHERRY_GROVE',186:'DARK_FOREST'};
+function cubiomesKey(id) { return CUBIOMES_BIOME_KEYS[id] || 'PLAINS'; }
+function biomeColor(key) {
+  const b=BIOME_DEFS[key]||BIOME_DEFS.PLAINS;
+  const n=b.grass ?? b.stone ?? 0x7dbb6b;
+  return [(n>>16)&255,(n>>8)&255,n&255];
+}
+async function renderBiomeMap() {
+  if(!biomeMapCanvas || !biomeMapCtx) return;
+  const size=biomeMapCanvas.width, ox=Math.floor(biomeMapOrigin.x), oz=Math.floor(biomeMapOrigin.z);
+  const seed=currentSeed.toString();
+  let ids=null;
+  if(window.CubiomesAdapter) {
+    try {
+      const topX=Math.round(ox-(size/2)*biomeMapStep), topZ=Math.round(oz-(size/2)*biomeMapStep);
+      ids=await window.CubiomesAdapter.generateMap({x:topX,z:topZ,width:size,height:size,step:biomeMapStep,y:80,seed});
+      biomeMapUsingCubiomes=true;
+    } catch(err) {
+      biomeMapUsingCubiomes=false;
+      console.info('[Cubiomes] WASM no disponible; se muestra preview aproximado.',err.message);
+    }
+  }
+  const img=biomeMapCtx.createImageData(size,size);
+  biomeMapCells=[];
+  for(let py=0;py<size;py++) {
+    for(let px=0;px<size;px++) {
+      const wx=ox+(px-size/2)*biomeMapStep;
+      const wz=oz+(py-size/2)*biomeMapStep;
+      let bk, h;
+      if(ids) {
+        bk=cubiomesKey(ids[py*size+px]);
+        h=null;
+      } else {
+        const v=getWorldHeight(wx,wz); bk=v.bk; h=v.h;
+      }
+      const c=biomeColor(bk), i=(py*size+px)*4;
+      img.data[i]=c[0]; img.data[i+1]=c[1]; img.data[i+2]=c[2]; img.data[i+3]=255;
+      biomeMapCells[py*size+px]={x:Math.round(wx),z:Math.round(wz),bk,h,biomeId:ids?ids[py*size+px]:null};
+    }
+  }
+  biomeMapCtx.putImageData(img,0,0);
+  biomeMapCtx.strokeStyle='#ffffff'; biomeMapCtx.lineWidth=1;
+  biomeMapCtx.beginPath(); biomeMapCtx.moveTo(size/2-5,size/2); biomeMapCtx.lineTo(size/2+5,size/2);
+  biomeMapCtx.moveTo(size/2,size/2-5); biomeMapCtx.lineTo(size/2,size/2+5); biomeMapCtx.stroke();
+  const note=document.getElementById('biome-map-note');
+  const readout=document.getElementById('biome-map-readout');
+  if(biomeMapUsingCubiomes) {
+    note.textContent='MOTOR DE BIOMAS CUBIOMES ACTIVO (versión solicitada: Java 1.21.1). La selección de biomas usa Cubiomes; alturas, costas y bloques del terreno 3D siguen siendo aproximados.';
+    note.style.color='#a6efb3';
+    readout.textContent=`Semilla: ${seed} · Centro: X ${ox}, Z ${oz} · Escala: ${biomeMapStep} bloques/píxel · Biomas calculados por Cubiomes.`;
+  } else {
+    note.textContent='VISTA PREVIA APROXIMADA: no se pudo cargar Cubiomes WASM. Los biomas pueden no coincidir con Java 1.21.1. Comprueba tu conexión y vuelve a cargar la página.';
+    note.style.color='#ffcf8a';
+    readout.textContent=`Semilla: ${seed} · Centro: X ${ox}, Z ${oz} · Escala: ${biomeMapStep} bloques/píxel · Preview no oficial.`;
+  }
+}
+function openBiomeMap() {
+  biomeMapOrigin={x:Math.round(camera?.position?.x||0),z:Math.round(camera?.position?.z||0)};
+  biomeMapPanel.classList.remove('hidden');
+  // Yield one frame so the panel paints before calculating the sample grid.
+  requestAnimationFrame(()=>renderBiomeMap());
+}
+document.getElementById('biome-map-open').addEventListener('click',openBiomeMap);
+document.getElementById('biome-map-close').addEventListener('click',()=>biomeMapPanel.classList.add('hidden'));
+document.getElementById('biome-map-refresh').addEventListener('click',renderBiomeMap);
+document.getElementById('biome-map-center').addEventListener('click',()=>{
+  biomeMapOrigin={x:Math.round(camera?.position?.x||0),z:Math.round(camera?.position?.z||0)};
+  renderBiomeMap();
+});
+biomeMapCanvas.addEventListener('click',e=>{
+  const r=biomeMapCanvas.getBoundingClientRect();
+  const px=Math.max(0,Math.min(191,Math.floor((e.clientX-r.left)/r.width*192)));
+  const py=Math.max(0,Math.min(191,Math.floor((e.clientY-r.top)/r.height*192)));
+  const v=biomeMapCells[py*192+px]; if(!v) return;
+  const label=(BIOME_DEFS[v.bk]||{}).name||v.bk;
+  document.getElementById('biome-map-readout').textContent=biomeMapUsingCubiomes?`X ${v.x}, Z ${v.z} · ${label} · ID Cubiomes ${v.biomeId}. Bioma calculado por Cubiomes; terreno 3D aún aproximado.`:`X ${v.x}, Z ${v.z} · ${label} · altura estimada Y ${v.h}. Datos aproximados, no vanilla.`;
+});
+
+function collectWorldgenSamples() {
+  const seed = currentSeed.toString();
+  const samples = [];
+  // Fixed, versioned coordinate set. These are samples from this app's current
+  // generator; importing reference values from a real Java 1.21.x world is needed
+  // before these can establish compatibility.
+  for (let x=-512; x<=512; x+=128) {
+    for (let z=-512; z<=512; z+=128) {
+      const v=getWorldHeight(x,z);
+      samples.push({x,z,biomeKey:v.bk,height:v.h});
+    }
+  }
+  return {
+    schema:'minecraft-3d-walk-worldgen-samples-v1',
+    target:WORLDGEN_TARGET,
+    engineStatus:WORLDGEN_STATUS,
+    seed,
+    sampleCount:samples.length,
+    note:'Muestras del motor actual. No son una prueba de equivalencia con Minecraft vanilla.',
+    samples
+  };
+}
+
+function runInternalSelfTests() {
+  const seedText=document.getElementById('seed-in').value.trim();
+  const seedA=seedFromString(seedText), seedB=seedFromString(seedText);
+  const coords=[[-128,-128],[-1,-1],[0,0],[15,15],[16,16],[128,-256]];
+  const first=coords.map(([x,z])=>({x,z,...getWorldHeight(x,z)}));
+  const second=coords.map(([x,z])=>({x,z,...getWorldHeight(x,z)}));
+  const same=JSON.stringify(first)===JSON.stringify(second);
+  const seedSame=seedA===seedB;
+  const valid=first.every(v=>Number.isInteger(v.h)&&typeof v.bk==='string'&&BIOME_DEFS[v.bk]);
+  const result={
+    suite:'internal-regression-not-vanilla-parity',
+    passed:seedSame&&same&&valid,
+    tests:[
+      {name:'seed parsing repeatable',passed:seedSame},
+      {name:'same coordinates repeatable in same session',passed:same},
+      {name:'height and biome values valid',passed:valid}
+    ],
+    warning:'These checks do not compare against Minecraft Java 1.21.x. Vanilla parity remains unverified.'
+  };
+  alert('Pruebas internas: '+(result.passed?'OK':'FALLÓ')+'\n'+result.tests.map(t=>(t.passed?'✓ ':'✗ ')+t.name).join('\n')+'\n\nNo comprueba fidelidad vanilla.');
+  console.info('[Worldgen self-tests]',result);
+  return result;
+}
+
+document.getElementById('export-reference').addEventListener('click',()=>{
+  const payload=JSON.stringify(collectWorldgenSamples(),null,2);
+  const url=URL.createObjectURL(new Blob([payload],{type:'application/json'}));
+  const a=document.createElement('a'); a.href=url; a.download='minecraft-1.21x-worldgen-samples-preview.json'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
+document.getElementById('run-self-tests').addEventListener('click',runInternalSelfTests);
+
+// Consola básica de comandos. /tp x y z y /tp @s x y z.
+const commandBar=document.getElementById('command-bar');
+const commandInput=document.getElementById('command-input');
+const commandHelp=document.getElementById('command-help');
+function openCommand(){ commandBar.classList.remove('hidden'); commandHelp.classList.remove('hidden'); commandInput.value='/tp '; commandInput.focus(); if(document.pointerLockElement) document.exitPointerLock(); }
+function closeCommand(){ commandBar.classList.add('hidden'); commandHelp.classList.add('hidden'); commandInput.blur(); }
+function runCommand(){
+  const raw=commandInput.value.trim();
+  const parts=raw.split(/\s+/);
+  if(parts[0]?.toLowerCase()!=='/tp' && parts[0]?.toLowerCase()!=='/teleport') { alert('Comando desconocido. Disponible: /tp x y z'); return; }
+  let args=parts.slice(1); if(args[0]==='@s'||args[0]==='@p'||args[0]==='@a') args=args.slice(1);
+  if(args.length!==3 || !args.every(v=>v!==''&&Number.isFinite(Number(v)))) { alert('Uso: /tp <x> <y> <z>  (ejemplo: /tp -508 90 24)'); return; }
+  const [x,y,z]=args.map(Number);
+  if(Math.abs(x)>30000000||Math.abs(z)>30000000||y< -64||y>320){alert('Coordenadas fuera de los límites admitidos por este prototipo.');return;}
+  camera.position.set(x,y,z); playerVel.set(0,0,0); onGround=false;
+  biomeMapOrigin={x:Math.round(x),z:Math.round(z)};
+  updateChunks();
+  closeCommand();
+}
+document.getElementById('command-run').addEventListener('click',runCommand);
+commandInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();runCommand();} if(e.key==='Escape'){e.preventDefault();closeCommand();}});
+
+document.getElementById('seed-in').addEventListener('keydown',e=>{
+  if(e.key==='Enter') { e.preventDefault(); regenWorld(); }
+});
+
+(async()=>{
+  initThree();
+  setupInput();
+  document.getElementById('prog-label').textContent='Generando preview. La compatibilidad vanilla 1.21.x todavía no está implementada.';
+  const seed=seedFromString(document.getElementById('seed-in').value);
+  await buildInitialWorld(seed, p=>{
+    document.getElementById('prog-fill').style.width=p+'%';
+    document.getElementById('prog-label').textContent=`Generando chunks... ${Math.round(p)}%`;
+  });
+  document.getElementById('loading').style.display='none';
+  document.getElementById('click-to-play').classList.remove('hidden');
+  loop();
+})();
+</script>
+</body>
+</html>
+HTMLEOF
