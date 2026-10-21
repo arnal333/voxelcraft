@@ -16,6 +16,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Build pinned Cubiomes WASM with Docker
+        run: |
+          docker build -f Dockerfile.emscripten -t voxelcraft-emsdk .
+          docker run --rm -v "${PWD}:/workspace" -w /workspace voxelcraft-emsdk
+          test -s engine/cubiomes.js
+          test -s engine/cubiomes.wasm
       - name: Test modular world-generation infrastructure
         run: node scripts/test-worldgen.js
       - name: Set up Python
