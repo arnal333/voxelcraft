@@ -124,7 +124,7 @@ body { background:#000; overflow:hidden; font-family:'Segoe UI',sans-serif; }
     <div id="chunk-info">Chunk: 0, 0</div>
   </div>
   <div id="biome-hud">Bioma: --</div>
-  <div id="controls-hint">WASD mover · Espacio saltar/subir en vuelo · Ctrl bajar · F alternar vuelo · Shift correr/boost · T o / comandos · ESC soltar mouse</div>
+  <div id="controls-hint">WASD mover · Espacio saltar/subir en vuelo · Ctrl bajar · F alternar vuelo · Shift lento/boost en vuelo · T o / comandos · ESC soltar mouse</div>
   <div id="seed-bar">
     <span style="color:#aaa;font-size:12px">Semilla:</span>
     <input id="seed-in" type="text" value="5890866665536842607">
@@ -971,7 +971,12 @@ async function buildInitialWorld(seed, onProg) {
 
   // Pre-generar chunks alrededor de la posición inicial real.
   let done=0;
-  const total=(RENDER_CHUNKS*2+1)**2;
+  let total=0;
+  for (let dx=-RENDER_CHUNKS; dx<=RENDER_CHUNKS; dx++) {
+    for (let dz=-RENDER_CHUNKS; dz<=RENDER_CHUNKS; dz++) {
+      if (dx*dx+dz*dz<=RENDER_CHUNKS*RENDER_CHUNKS) total++;
+    }
+  }
   for(let dx=-RENDER_CHUNKS;dx<=RENDER_CHUNKS;dx++) {
     for(let dz=-RENDER_CHUNKS;dz<=RENDER_CHUNKS;dz++) {
       if(dx*dx+dz*dz<=RENDER_CHUNKS*RENDER_CHUNKS) {
@@ -1065,12 +1070,18 @@ async function regenWorld() {
   document.getElementById('hud').classList.add('hidden');
   biomeMapPanel.classList.add('hidden');
   await new Promise(r=>setTimeout(r,30));
-  await buildInitialWorld(seed, p=>{
-    document.getElementById('prog-fill').style.width=p+'%';
-    document.getElementById('prog-label').textContent=`Generando chunks... ${Math.round(p)}%`;
-  });
-  document.getElementById('loading').style.display='none';
-  document.getElementById('click-to-play').classList.remove('hidden');
+  try {
+    await buildInitialWorld(seed, p=>{
+      document.getElementById('prog-fill').style.width=p+'%';
+      document.getElementById('prog-label').textContent=`Generando chunks... ${Math.round(p)}%`;
+    });
+  } catch (error) {
+    console.error('[Worldgen] Falló la regeneración:', error);
+    document.getElementById('prog-label').textContent='No se pudo generar el mundo. Revisa la consola y vuelve a intentar.';
+  } finally {
+    document.getElementById('loading').style.display='none';
+    document.getElementById('click-to-play').classList.remove('hidden');
+  }
 }
 
 // Biome map uses Cubiomes WASM when it loads; block-level terrain remains approximate.
@@ -1245,12 +1256,18 @@ document.getElementById('seed-in').addEventListener('keydown',e=>{
   setupInput();
   document.getElementById('prog-label').textContent='Generando preview. La compatibilidad vanilla 1.21.x todavía no está implementada.';
   const seed=seedFromString(document.getElementById('seed-in').value);
-  await buildInitialWorld(seed, p=>{
-    document.getElementById('prog-fill').style.width=p+'%';
-    document.getElementById('prog-label').textContent=`Generando chunks... ${Math.round(p)}%`;
-  });
-  document.getElementById('loading').style.display='none';
-  document.getElementById('click-to-play').classList.remove('hidden');
+  try {
+    await buildInitialWorld(seed, p=>{
+      document.getElementById('prog-fill').style.width=p+'%';
+      document.getElementById('prog-label').textContent=`Generando chunks... ${Math.round(p)}%`;
+    });
+  } catch (error) {
+    console.error('[Worldgen] Falló la carga inicial:', error);
+    document.getElementById('prog-label').textContent='No se pudo generar el mundo. Revisa la consola y vuelve a intentar.';
+  } finally {
+    document.getElementById('loading').style.display='none';
+    document.getElementById('click-to-play').classList.remove('hidden');
+  }
   loop();
 })();
 </script>
