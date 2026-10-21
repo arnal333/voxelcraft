@@ -18,3 +18,9 @@ jobs:
           node-version: 22
       - name: Test modular world-generation infrastructure
         run: node scripts/test-worldgen.js
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test vanilla worldgen-data extractor
+        run: python scripts/test-extract-worldgen.py
